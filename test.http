@@ -1,0 +1,26 @@
+//$env:JAVA_HOME="D:\IntelliJ IDEA 2025.2\jbr"; mvn test
+
+### 1. select all devices
+GET http://localhost:8080/api/resources
+
+### 2. make a booking: resource 1, 10:00 - 12:00
+POST http://localhost:8080/api/bookings
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "resourceId": 1,
+  "startTime": "2026-09-01T10:00:00",
+  "endTime": "2026-09-01T12:00:00"
+}
+
+### 3. make a booking: resource 1, 11:00 - 13:00 (conflict)
+POST http://localhost:8080/api/bookings
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "resourceId": 1,
+  "startTime": "2026-09-01T11:00:00",
+  "endTime": "2026-09-01T13:00:00"
+}
