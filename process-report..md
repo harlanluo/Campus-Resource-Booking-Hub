@@ -80,3 +80,21 @@ Progress Report for Week One
    • Configure the database connection (H2 embedded database for development).
    • Create JPA/Hibernate Entity classes corresponding to the database tables.
    • Implement foundational User authentication (Login/Registration) logic if time permits.
+
+Progress Report for Week Two
+
+1. Achievements in the Last Week:
+   • Project Initialization: Successfully set up the Spring Boot project using Maven, importing necessary dependencies such as Spring Web, Spring Data JPA, H2 Database, and Lombok.
+   • Database Integration: Configured the embedded H2 database to automatically execute the schema.sql and data.sql scripts on startup.
+   • JPA Entities & Repositories: Mapped the relational database schema into Java objects. Created Entity classes (User, Resource, Booking, Waitlist) and their respective Spring Data JPA Repositories.
+   • RESTful APIs Implemented: Developed the Service and Controller layers to expose core endpoints:
+   o GET /api/resources
+   o GET /api/resources/available
+   o POST /api/users/register and POST /api/users/login
+2. New Challenges Encountered & Handled:
+   • Challenge: Encountered minor issues with Maven dependency downloads and environment variable configurations during the initial Spring Boot build.
+   • Solution: Handled it by cleaning the Maven cache and reloading the project dependencies. Successfully verified the build by testing the endpoints via the browser.
+3. Plans for the Next Week (Week Three):
+   • Focus on the Core Booking Logic: Implement the POST /api/bookings endpoint.
+   • Develop the Time-Slot Conflict Prevention algorithm to ensure resources cannot be double-booked.
+   • Start implementing the basic Waitlist auto-queue logic.
