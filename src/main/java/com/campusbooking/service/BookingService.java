@@ -6,10 +6,13 @@ import com.campusbooking.exception.BookingConflictException;
 import com.campusbooking.model.Booking;
 import com.campusbooking.model.Resource;
 import com.campusbooking.model.User;
+import com.campusbooking.model.Waitlist;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
+import com.campusbooking.repository.WaitlistRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +33,14 @@ import java.util.List;
  * </pre>
  * If the query returns a non-empty list a {@link BookingConflictException} is
  * thrown immediately, preventing dual-booking of the same time slot.
+ *
+ * <h3>Waitlist auto-trigger</h3>
+ * When {@link #cancelBooking(Long)} cancels a booking, the service
+ * automatically checks the waitlist for that resource.  If any
+ * {@code WAITING} entries exist, the earliest one (by {@code request_time})
+ * is promoted to {@code PROMOTED} and an auto-notification event is logged.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -39,6 +49,7 @@ public class BookingService {
     private final BookingRepository   bookingRepository;
     private final ResourceRepository  resourceRepository;
     private final UserRepository      userRepository;
+    private final WaitlistRepository  waitlistRepository;
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -146,6 +157,18 @@ public class BookingService {
                 .toList();
     }
 
+    /**
+     * Returns all bookings in the system regardless of user (for Admin overview).
+     *
+     * @return list of all bookings as DTOs
+     */
+    public List<BookingResponseDTO> getAllBookings() {
+        return bookingRepository.findAll()
+                .stream()
+                .map(BookingResponseDTO::from)
+                .toList();
+    }
+
     // ── Cancel ────────────────────────────────────────────────────────────────
 
     /**
@@ -155,6 +178,12 @@ public class BookingService {
      * <p>Only bookings in the {@code PENDING} or {@code CONFIRMED} state may be
      * cancelled; attempting to cancel a {@code COMPLETED} or already-{@code CANCELLED}
      * booking returns a {@code 400 BAD REQUEST}.</p>
+     *
+     * <h4>Waitlist auto-trigger</h4>
+     * After cancellation, the service queries the waitlist for the freed resource.
+     * If one or more {@code WAITING} entries exist, the earliest entry
+     * (by {@code request_time}) is promoted to {@code PROMOTED} and an
+     * auto-notification event is logged.
      *
      * @param bookingId the ID of the booking to cancel
      * @return the updated {@link BookingResponseDTO} reflecting the new status
@@ -181,6 +210,107 @@ public class BookingService {
 
         booking.setStatus(Booking.Status.CANCELLED);
         Booking updated = bookingRepository.save(booking);
+
+        // ── Waitlist auto-trigger ─────────────────────────────────────────────
+        triggerWaitlistPromotion(booking.getResource().getId());
+
         return BookingResponseDTO.from(updated);
+    }
+
+    // ── Admin: Approve / Reject ───────────────────────────────────────────────
+
+    /**
+     * Approves a booking by setting its status to {@link Booking.Status#APPROVED}.
+     *
+     * <p>Can be applied to bookings in any state except {@code CANCELLED} or
+     * {@code COMPLETED}.</p>
+     *
+     * @param bookingId the ID of the booking to approve
+     * @return the updated {@link BookingResponseDTO} reflecting {@code APPROVED} status
+     * @throws ResponseStatusException {@code 404} if the booking does not exist;
+     *                                 {@code 400} if the booking is already terminal
+     */
+    @Transactional
+    public BookingResponseDTO approveBooking(Long bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Booking not found with id: " + bookingId));
+
+        if (booking.getStatus() == Booking.Status.CANCELLED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Cannot approve a cancelled booking.");
+        }
+        if (booking.getStatus() == Booking.Status.COMPLETED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Cannot approve a completed booking.");
+        }
+
+        booking.setStatus(Booking.Status.APPROVED);
+        Booking updated = bookingRepository.save(booking);
+        log.info("[Admin] Booking {} approved.", bookingId);
+        return BookingResponseDTO.from(updated);
+    }
+
+    /**
+     * Rejects a booking by setting its status to {@link Booking.Status#REJECTED}.
+     *
+     * <p>Can be applied to bookings in {@code PENDING} state.  Rejecting an
+     * already-terminal booking returns a {@code 400}.</p>
+     *
+     * @param bookingId the ID of the booking to reject
+     * @return the updated {@link BookingResponseDTO} reflecting {@code REJECTED} status
+     * @throws ResponseStatusException {@code 404} if the booking does not exist;
+     *                                 {@code 400} if the booking is already terminal
+     */
+    @Transactional
+    public BookingResponseDTO rejectBooking(Long bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Booking not found with id: " + bookingId));
+
+        if (booking.getStatus() == Booking.Status.CANCELLED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Cannot reject a cancelled booking.");
+        }
+        if (booking.getStatus() == Booking.Status.COMPLETED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Cannot reject a completed booking.");
+        }
+
+        booking.setStatus(Booking.Status.REJECTED);
+        Booking updated = bookingRepository.save(booking);
+        log.info("[Admin] Booking {} rejected.", bookingId);
+        return BookingResponseDTO.from(updated);
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Checks the waitlist for the given resource and promotes the earliest
+     * {@code WAITING} entry to {@code PROMOTED}, logging an auto-notification event.
+     *
+     * <p>Called automatically after a booking is cancelled, freeing up a slot
+     * that a waitlisted user may now claim.</p>
+     *
+     * @param resourceId the ID of the resource that just became available
+     */
+    private void triggerWaitlistPromotion(Long resourceId) {
+        List<Waitlist> queue = waitlistRepository
+                .findByResourceIdAndStatusOrderByRequestTimeAsc(resourceId, Waitlist.Status.WAITING);
+
+        if (!queue.isEmpty()) {
+            Waitlist next = queue.get(0);
+            next.setStatus(Waitlist.Status.PROMOTED);
+            waitlistRepository.save(next);
+            log.info("[Waitlist Auto-Trigger] User {} promoted for resource {}. " +
+                            "They should be notified to complete their booking.",
+                    next.getUser().getId(), resourceId);
+        }
     }
 }
