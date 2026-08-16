@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus Resource Booking Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- App Shell -->
+  <div id="app" class="app-container">
+    
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="nav-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+            <path d="M6 6h10"/>
+            <path d="M6 10h10"/>
+            <path d="M6 14h6"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">Campus Booking Hub</span>
+          <span class="brand-badge">Academic v1.0</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs" id="navTabs" role="tablist">
+        <button class="nav-tab active" data-tab="browse" id="tabBrowseBtn" role="tab" aria-selected="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <span>Browse Resources</span>
+        </button>
+        <button class="nav-tab" data-tab="my-bookings" id="tabMyBookingsBtn" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <span>My Bookings & Waitlist</span>
+          <span class="tab-pill" id="myBookingsCount">0</span>
+        </button>
+        <button class="nav-tab" data-tab="admin" id="tabAdminBtn" role="tab" aria-selected="false" style="display: none;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>Admin Panel</span>
+          <span class="tab-pill warning" id="adminPendingCount">0</span>
+        </button>
+      </nav>
+
+      <!-- User Switcher & Status -->
+      <div class="nav-actions">
+        <div class="system-status-indicator" title="Backend API & H2 Database Status">
+          <span class="pulse-dot"></span>
+          <span class="status-text">API Online</span>
+        </div>
+
+        <div class="user-switcher-container">
+          <label for="userSelect" class="sr-only">Switch User</label>
+          <div class="user-pill">
+            <div class="user-avatar" id="currentUserAvatar">A</div>
+            <select id="userSelect" class="user-dropdown" aria-label="Select active user">
+              <option value="1" data-role="STUDENT" data-name="Alice Student" data-email="alice@campus.edu">🎓 Alice (Student • ID: 1)</option>
+              <option value="2" data-role="ADMIN" data-name="Bob Admin" data-email="bob@campus.edu">🛡️ Bob (Admin • ID: 2)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- TAB 1: BROWSE RESOURCES -->
+      <section id="tab-browse" class="tab-content active" role="tabpanel" aria-labelledby="tabBrowseBtn">
+        <!-- Hero Header -->
+        <div class="page-header">
+          <div class="header-titles">
+            <h1 class="page-title">Explore Campus Resources</h1>
+            <p class="page-subtitle">Reserve study rooms, high-performance computer labs, and audiovisual equipment seamlessly.</p>
+          </div>
+          <div class="header-metrics">
+            <div class="metric-card">
+              <span class="metric-value" id="metricTotal">0</span>
+              <span class="metric-label">Total Resources</span>
+            </div>
+            <div class="metric-card success">
+              <span class="metric-value" id="metricAvailable">0</span>
+              <span class="metric-label">Available Now</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="toolbar">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="resourceSearchInput" placeholder="Search by name, type, or description..." />
+          </div>
+
+          <div class="filter-chips" id="typeFilters">
+            <button class="chip active" data-filter="ALL">All Items</button>
+            <button class="chip" data-filter="ROOM">🏛️ Study Rooms</button>
+            <button class="chip" data-filter="LAB">💻 Computer Labs</button>
+            <button class="chip" data-filter="EQUIPMENT">📽️ Equipment</button>
+            <button class="chip-toggle" id="onlyAvailableToggle">
+              <span class="toggle-switch"></span>
+              <span>Available Only</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Resources Grid -->
+        <div class="resources-grid" id="resourcesGrid">
+          <!-- Populated dynamically via app.js -->
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading campus resources from backend...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: MY BOOKINGS & WAITLIST -->
+      <section id="tab-my-bookings" class="tab-content" role="tabpanel" aria-labelledby="tabMyBookingsBtn">
+        <div class="page-header">
+          <div class="header-titles">
+            <h1 class="page-title">My Bookings & Waitlist Queue</h1>
+            <p class="page-subtitle">Track your upcoming reservations, view approvals, and monitor your waitlist positions.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" id="refreshMyBookingsBtn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+              </svg>
+              <span>Refresh Schedule</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Auto-trigger explanation card -->
+        <div class="info-callout">
+          <div class="callout-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </div>
+          <div class="callout-content">
+            <strong>Automated Waitlist Promotion:</strong> When you cancel an active booking, the system immediately inspects the waitlist for that resource and automatically promotes the next student in queue to <code>PROMOTED</code> status!
+          </div>
+        </div>
+
+        <!-- Section: Active Bookings -->
+        <div class="section-container">
+          <div class="section-title-bar">
+            <h2 class="section-title">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <span>My Booking Reservations</span>
+            </h2>
+            <span class="count-badge" id="bookingsCountBadge">0 Bookings</span>
+          </div>
+
+          <div class="bookings-list" id="myBookingsList">
+            <!-- Populated dynamically via app.js -->
+            <div class="empty-state">
+              <p>No bookings found for the selected user.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: My Waitlist Queue -->
+        <div class="section-container" style="margin-top: 2rem;">
+          <div class="section-title-bar">
+            <h2 class="section-title">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>My Active Waitlist Positions</span>
+            </h2>
+            <span class="count-badge" id="waitlistCountBadge">0 Waitlisted</span>
+          </div>
+
+          <div class="waitlist-grid" id="myWaitlistList">
+            <!-- Populated dynamically via app.js -->
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: ADMIN PANEL -->
+      <section id="tab-admin" class="tab-content" role="tabpanel" aria-labelledby="tabAdminBtn">
+        <div class="page-header">
+          <div class="header-titles">
+            <h1 class="page-title">Administrator Management Portal</h1>
+            <p class="page-subtitle">Review pending student bookings, manage campus resource inventory, and perform maintenance toggles.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" id="openAddResourceModalBtn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              <span>Add New Resource</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Admin Stats Overview -->
+        <div class="admin-stats-grid">
+          <div class="admin-stat-card warning">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-info">
+              <span class="stat-number" id="statPendingBookings">0</span>
+              <span class="stat-title">Pending Approvals</span>
+            </div>
+          </div>
+          <div class="admin-stat-card success">
+            <div class="stat-icon">✅</div>
+            <div class="stat-info">
+              <span class="stat-number" id="statApprovedBookings">0</span>
+              <span class="stat-title">Approved Bookings</span>
+            </div>
+          </div>
+          <div class="admin-stat-card info">
+            <div class="stat-icon">🏛️</div>
+            <div class="stat-info">
+              <span class="stat-number" id="statTotalResources">0</span>
+              <span class="stat-title">Total Resources</span>
+            </div>
+          </div>
+          <div class="admin-stat-card danger">
+            <div class="stat-icon">🔧</div>
+            <div class="stat-info">
+              <span class="stat-number" id="statMaintenanceResources">0</span>
+              <span class="stat-title">In Maintenance</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 1: Bookings Management & Approvals -->
+        <div class="section-container" style="margin-top: 2rem;">
+          <div class="section-title-bar">
+            <div class="title-with-filter">
+              <h2 class="section-title">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="8.5" cy="7" r="4"/>
+                  <polyline points="17 11 19 13 23 9"/>
+                </svg>
+                <span>Booking Requests & Approval Queue</span>
+              </h2>
+            </div>
+            <div class="admin-filter-pills">
+              <button class="pill-btn active" data-admin-filter="ALL">All (<span id="countAllAdminBookings">0</span>)</button>
+              <button class="pill-btn warning" data-admin-filter="PENDING">Pending (<span id="countPendingAdminBookings">0</span>)</button>
+              <button class="pill-btn success" data-admin-filter="APPROVED">Approved (<span id="countApprovedAdminBookings">0</span>)</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="admin-table" id="adminBookingsTable">
+              <thead>
+                <tr>
+                  <th>Booking ID</th>
+                  <th>User</th>
+                  <th>Resource</th>
+                  <th>Reserved Time Window</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Admin Action</th>
+                </tr>
+              </thead>
+              <tbody id="adminBookingsTbody">
+                <!-- Populated dynamically via app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 2: Resource Inventory Management -->
+        <div class="section-container" style="margin-top: 2.5rem;">
+          <div class="section-title-bar">
+            <h2 class="section-title">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              </svg>
+              <span>Campus Resource Inventory</span>
+            </h2>
+          </div>
+
+          <div class="table-responsive">
+            <table class="admin-table" id="adminResourcesTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Resource Name</th>
+                  <th>Type</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Status Toggle & Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminResourcesTbody">
+                <!-- Populated dynamically via app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <p><strong>Campus Resource Booking Hub</strong> • Spring Boot 3 + H2 REST Backend</p>
+        <div class="footer-links">
+          <span>H2 Console: <a href="http://localhost:8080/h2-console" target="_blank" rel="noopener">/h2-console</a></span>
+          <span>•</span>
+          <span id="quickStatsFooter">Ready for testing</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- MODAL: BOOK RESOURCE -->
+  <div class="modal-backdrop" id="bookingModalBackdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalBookingTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon-badge" id="modalResourceIcon">🏛️</div>
+          <div>
+            <h3 class="modal-title" id="modalBookingTitle">Reserve Resource</h3>
+            <span class="modal-subtitle" id="modalResourceSubtitle">Study Room A • ROOM</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeBookingModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <!-- Conflict Alert Banner (Displayed dynamically when 409 occurs) -->
+      <div class="conflict-banner" id="conflictBanner" style="display: none;">
+        <div class="conflict-icon">⚠️</div>
+        <div class="conflict-body">
+          <h4 class="conflict-title">Time-Slot Conflict!</h4>
+          <p class="conflict-text" id="conflictMessage">This resource is already booked for the selected period.</p>
+          <div class="conflict-action">
+            <button class="btn btn-warning-action" id="joinWaitlistFromConflictBtn">
+              <span>⏳ Join Waitlist Queue for this Resource</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <form id="bookingForm" class="modal-form">
+        <input type="hidden" id="bookingResourceId" />
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="bookingStartTime">Start Time <span class="required">*</span></label>
+            <input type="datetime-local" id="bookingStartTime" required />
+          </div>
+          <div class="form-group">
+            <label for="bookingEndTime">End Time <span class="required">*</span></label>
+            <input type="datetime-local" id="bookingEndTime" required />
+          </div>
+        </div>
+
+        <!-- Quick Presets -->
+        <div class="presets-section">
+          <span class="preset-label">Quick Presets:</span>
+          <div class="preset-buttons">
+            <button type="button" class="preset-btn" id="presetTomorrowMorning">Tomorrow 9am - 11am</button>
+            <button type="button" class="preset-btn" id="presetTomorrowAfternoon">Tomorrow 2pm - 4pm</button>
+            <button type="button" class="preset-btn" id="presetNextDay">Next Day 10am - 12pm</button>
+          </div>
+        </div>
+
+        <div class="booking-summary-box">
+          <div class="summary-line">
+            <span>Booking User:</span>
+            <strong id="modalUserName">Alice Student (ID: 1)</strong>
+          </div>
+          <div class="summary-line">
+            <span>Estimated Duration:</span>
+            <strong id="modalDurationPreview">2 hours</strong>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="cancelBookingModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="submitBookingBtn">
+            <span class="btn-text">Confirm Booking</span>
+            <span class="btn-spinner" style="display: none;"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD RESOURCE (ADMIN) -->
+  <div class="modal-backdrop" id="addResourceModalBackdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalAddResourceTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon-badge">➕</div>
+          <div>
+            <h3 class="modal-title" id="modalAddResourceTitle">Add Campus Resource</h3>
+            <span class="modal-subtitle">Register a new room, lab, or piece of equipment</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeAddResourceModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <form id="addResourceForm" class="modal-form">
+        <div class="form-group">
+          <label for="newResourceName">Resource Name <span class="required">*</span></label>
+          <input type="text" id="newResourceName" placeholder="e.g. Media Studio 305" required />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="newResourceType">Category / Type <span class="required">*</span></label>
+            <select id="newResourceType" required>
+              <option value="ROOM">ROOM (Study room, meeting room)</option>
+              <option value="LAB">LAB (Computer lab, scientific lab)</option>
+              <option value="EQUIPMENT">EQUIPMENT (Projector, camera, kit)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="newResourceStatus">Initial Status <span class="required">*</span></label>
+            <select id="newResourceStatus" required>
+              <option value="AVAILABLE">AVAILABLE</option>
+              <option value="MAINTENANCE">MAINTENANCE</option>
+              <option value="UNAVAILABLE">UNAVAILABLE</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="newResourceDescription">Description / Features</label>
+          <textarea id="newResourceDescription" rows="3" placeholder="Provide details such as seating capacity, equipment specs, or building location..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="cancelAddResourceModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="submitAddResourceBtn">
+            <span>Save Resource</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: WAITLIST QUEUE VIEWER -->
+  <div class="modal-backdrop" id="waitlistQueueModalBackdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalQueueTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon-badge">📋</div>
+          <div>
+            <h3 class="modal-title" id="modalQueueTitle">Resource Waitlist Queue</h3>
+            <span class="modal-subtitle" id="modalQueueSubtitle">Real-time FIFO waitlist order</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeQueueModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="queue-content">
+        <div class="queue-list" id="resourceQueueList">
+          <!-- Populated dynamically via app.js -->
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="joinWaitlistDirectBtn">
+          <span>+ Join This Queue</span>
+        </button>
+        <button type="button" class="btn btn-ghost" id="closeQueueModalBottomBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- Main JavaScript Bundle -->
+  <script src="app.js"></script>
+</body>
+</html>
