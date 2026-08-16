@@ -1,5 +1,6 @@
 COMPX576 Campus Resource Booking Hub
 Project Proposal:
+//mvn spring-boot:run http://localhost:8080
 
 1. Introduction
    This project, "Campus Resource Booking Hub," is a responsive web application designed specifically for university students and administrators to efficiently manage and book campus resources, such as lab equipment (cameras, laptops) and meeting rooms. I chose this project after reviewing the existing university Resource Booker system and identifying areas for improvement from a student's perspective. The project aims to solve the limitations of current systems by introducing student-centric features like waitlisting for high-demand equipment, resource bundling for complex assignments, and collaborative group bookings, thereby making the campus resource management process more seamless, robust, and user-friendly.
@@ -98,3 +99,24 @@ Progress Report for Week Two
    • Focus on the Core Booking Logic: Implement the POST /api/bookings endpoint.
    • Develop the Time-Slot Conflict Prevention algorithm to ensure resources cannot be double-booked.
    • Start implementing the basic Waitlist auto-queue logic.
+
+Progress Report for Week Three
+
+1. Achievements in the Last Week:
+   • Time-Slot Conflict Prevention Algorithm: Implemented the core overlapping time-slot check using custom JPQL in BookingRepository with the mathematical condition (existing_start < new_end) AND (existing_end > new_start). This completely prevents dual-booking of the same resource.
+   • Service Layer & Validation Pipeline: Developed BookingService featuring a strict 6-step validation pipeline (User existence, Resource existence, Resource availability status, Future time check, End time order, and Overlap prevention).
+   • DTOs & Clean Architecture: Created BookingRequestDTO and BookingResponseDTO with static factory methods to prevent Entity leakage and ensure data validation.
+   • Global Exception Handling: Created BookingConflictException and configured @RestControllerAdvice in GlobalExceptionHandler to return standardized HTTP 409 Conflict JSON error responses when time overlaps occur.
+   • RESTful APIs: Implemented endpoints in BookingController:
+   o POST /api/bookings (Creates booking with 6-step validation)
+   o GET /api/bookings/user/{userId} (Retrieves personal bookings)
+   o PUT /api/bookings/{bookingId}/cancel (Cancels pending/confirmed bookings)
+   • Comprehensive Testing: Wrote a complete test suite of 13 Unit Tests using JUnit 5 and Mockito (BookingServiceTest), achieving 100% test pass rate covering successful bookings, conflict handling, and edge-case exceptions.
+   Comparison to previous plan: Fully accomplished all planned goals for Week 3, successfully resolving the core technical challenge required for the project.
+2. New Challenges Encountered & Handled:
+   • Challenge: Accurately detecting all time-slot overlap scenarios (e.g., partial overlap at start/end, or complete enclosure of time slots) without complex and slow database logic.
+   • Solution: Used the simplified mathematical logic (existing_start < new_end) AND (existing_end > new_start), which elegantly captures all overlap conditions in a single, lightweight JPQL query.
+3. Plans for the Next Week (Week Four):
+   • Implement the Waitlist Management System (Queue logic) so students can queue for resources that are currently fully booked.
+   • Begin designing the Resource Bundling feature ("Project Kits" for single-click multi-item bookings).
+   • Extend API endpoints to allow joining and managing waitlist queues.
