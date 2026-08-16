@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     start_time  DATETIME     NOT NULL,
     end_time    DATETIME     NOT NULL,
     status      VARCHAR(20)  NOT NULL DEFAULT 'PENDING'
-        CHECK (status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED')),
+        CHECK (status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'APPROVED', 'REJECTED')),
     CONSTRAINT fk_bookings_user     FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
     CONSTRAINT fk_bookings_resource FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,
     CONSTRAINT chk_booking_time     CHECK (end_time > start_time)

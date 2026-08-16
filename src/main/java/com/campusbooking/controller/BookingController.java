@@ -15,9 +15,11 @@ import java.util.List;
  * REST controller for campus resource booking operations.
  *
  * <pre>
- * POST /api/bookings               – Create a new booking
- * GET  /api/bookings/user/{userId} – Retrieve all bookings for a user
- * PUT  /api/bookings/{bookingId}/cancel – Cancel an existing booking
+ * POST /api/bookings                   – Create a new booking
+ * GET  /api/bookings/user/{userId}     – Retrieve all bookings for a user
+ * PUT  /api/bookings/{id}/cancel       – Cancel an existing booking
+ * PUT  /api/bookings/{id}/approve      – Admin: approve a booking
+ * PUT  /api/bookings/{id}/reject       – Admin: reject a booking
  * </pre>
  */
 @RestController
@@ -31,7 +33,7 @@ public class BookingController {
      * Creates a new booking for a campus resource.
      *
      * <ul>
-     *   <li>{@code 201 Created}  – booking saved successfully; returns {@link BookingResponseDTO}</li>
+     *   <li>{@code 201 Created}     – booking saved successfully; returns {@link BookingResponseDTO}</li>
      *   <li>{@code 400 Bad Request} – invalid time window (past start, end ≤ start)</li>
      *   <li>{@code 404 Not Found}   – user or resource does not exist</li>
      *   <li>{@code 409 Conflict}    – resource unavailable or time-slot already booked</li>
@@ -60,10 +62,21 @@ public class BookingController {
     }
 
     /**
+     * Retrieves all bookings across all users (Admin overview).
+     *
+     * @return {@code 200 OK} with a list of all {@link BookingResponseDTO}
+     */
+    @GetMapping
+    public ResponseEntity<List<BookingResponseDTO>> getAllBookings() {
+        List<BookingResponseDTO> bookings = bookingService.getAllBookings();
+        return ResponseEntity.ok(bookings);
+    }
+
+    /**
      * Retrieves all bookings made by a specific user.
      *
      * <ul>
-     *   <li>{@code 200 OK}       – returns list of the user's bookings (may be empty)</li>
+     *   <li>{@code 200 OK}        – returns list of the user's bookings (may be empty)</li>
      *   <li>{@code 404 Not Found} – user with the given ID does not exist</li>
      * </ul>
      *
@@ -82,10 +95,12 @@ public class BookingController {
      * Cancels an existing booking.
      *
      * <ul>
-     *   <li>{@code 200 OK}        – booking cancelled; returns updated {@link BookingResponseDTO}</li>
-     *   <li>{@code 400 Bad Request} – booking is already cancelled or completed</li>
-     *   <li>{@code 404 Not Found}   – booking with the given ID does not exist</li>
+     *   <li>{@code 200 OK}          – booking cancelled; returns updated {@link BookingResponseDTO}</li>
+     *   <li>{@code 400 Bad Request}  – booking is already cancelled or completed</li>
+     *   <li>{@code 404 Not Found}    – booking with the given ID does not exist</li>
      * </ul>
+     *
+     * <p>Automatically triggers waitlist promotion for the freed resource slot.</p>
      *
      * @param bookingId the ID of the booking to cancel
      * @return {@code 200 OK} with the updated booking reflecting {@code CANCELLED} status
@@ -95,6 +110,46 @@ public class BookingController {
             @PathVariable Long bookingId) {
 
         BookingResponseDTO response = bookingService.cancelBooking(bookingId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Admin endpoint: approves a booking by changing its status to {@code APPROVED}.
+     *
+     * <ul>
+     *   <li>{@code 200 OK}          – booking approved; returns updated {@link BookingResponseDTO}</li>
+     *   <li>{@code 400 Bad Request}  – booking is already terminal (CANCELLED/COMPLETED)</li>
+     *   <li>{@code 404 Not Found}    – booking with the given ID does not exist</li>
+     * </ul>
+     *
+     * @param id the ID of the booking to approve
+     * @return {@code 200 OK} with the updated booking reflecting {@code APPROVED} status
+     */
+    @PutMapping("/{id}/approve")
+    public ResponseEntity<BookingResponseDTO> approveBooking(
+            @PathVariable Long id) {
+
+        BookingResponseDTO response = bookingService.approveBooking(id);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Admin endpoint: rejects a booking by changing its status to {@code REJECTED}.
+     *
+     * <ul>
+     *   <li>{@code 200 OK}          – booking rejected; returns updated {@link BookingResponseDTO}</li>
+     *   <li>{@code 400 Bad Request}  – booking is already terminal (CANCELLED/COMPLETED)</li>
+     *   <li>{@code 404 Not Found}    – booking with the given ID does not exist</li>
+     * </ul>
+     *
+     * @param id the ID of the booking to reject
+     * @return {@code 200 OK} with the updated booking reflecting {@code REJECTED} status
+     */
+    @PutMapping("/{id}/reject")
+    public ResponseEntity<BookingResponseDTO> rejectBooking(
+            @PathVariable Long id) {
+
+        BookingResponseDTO response = bookingService.rejectBooking(id);
         return ResponseEntity.ok(response);
     }
 }

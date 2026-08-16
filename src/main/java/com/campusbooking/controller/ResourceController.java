@@ -3,19 +3,23 @@ package com.campusbooking.controller;
 import com.campusbooking.model.Resource;
 import com.campusbooking.service.ResourceService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * REST controller exposing read-only endpoints for campus {@link Resource} data.
+ * REST controller exposing read and admin-write endpoints for campus {@link Resource} data.
  *
  * <pre>
- * GET /api/resources           – All resources (regardless of status)
- * GET /api/resources/available – Only AVAILABLE resources
+ * GET    /api/resources              – All resources (regardless of status)
+ * GET    /api/resources/available    – Only AVAILABLE resources
+ * POST   /api/resources              – Admin: add a new resource
+ * PUT    /api/resources/{id}         – Admin: update an existing resource
+ * DELETE /api/resources/{id}         – Admin: delete a resource
+ * PATCH  /api/resources/{id}/status  – Admin: quick status toggle
  * </pre>
  */
 @RestController
@@ -24,6 +28,8 @@ import java.util.List;
 public class ResourceController {
 
     private final ResourceService resourceService;
+
+    // ── Read ──────────────────────────────────────────────────────────────────
 
     /**
      * Returns a list of all campus resources.
@@ -49,5 +55,116 @@ public class ResourceController {
     public ResponseEntity<List<Resource>> getAvailableResources() {
         List<Resource> available = resourceService.getAvailableResources();
         return ResponseEntity.ok(available);
+    }
+
+    // ── Admin: Create ─────────────────────────────────────────────────────────
+
+    /**
+     * Admin endpoint: adds a new campus resource (room, lab, equipment, etc.).
+     *
+     * <ul>
+     *   <li>{@code 201 Created}     – resource saved; returns the persisted entity</li>
+     *   <li>{@code 400 Bad Request} – missing required fields or constraint violation</li>
+     * </ul>
+     *
+     * <p>Example request body:
+     * <pre>{@code
+     * {
+     *   "name": "Room B202",
+     *   "type": "ROOM",
+     *   "description": "Lecture hall for 60 students",
+     *   "status": "AVAILABLE"
+     * }
+     * }</pre>
+     * </p>
+     *
+     * @param resource the resource payload to persist
+     * @return {@code 201 Created} with the saved resource (including generated id)
+     */
+    @PostMapping
+    public ResponseEntity<Resource> createResource(@RequestBody Resource resource) {
+        Resource saved = resourceService.createResource(resource);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    // ── Admin: Update ─────────────────────────────────────────────────────────
+
+    /**
+     * Admin endpoint: fully updates an existing resource.
+     *
+     * <ul>
+     *   <li>{@code 200 OK}        – resource updated; returns the updated entity</li>
+     *   <li>{@code 404 Not Found} – no resource with the given id</li>
+     * </ul>
+     *
+     * @param id      path variable identifying the resource to update
+     * @param updated request body with the new field values
+     * @return {@code 200 OK} with the updated resource
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<Resource> updateResource(
+            @PathVariable Long id,
+            @RequestBody Resource updated) {
+
+        Resource result = resourceService.updateResource(id, updated);
+        return ResponseEntity.ok(result);
+    }
+
+    // ── Admin: Delete ─────────────────────────────────────────────────────────
+
+    /**
+     * Admin endpoint: permanently deletes a resource.
+     *
+     * <ul>
+     *   <li>{@code 204 No Content} – resource deleted successfully</li>
+     *   <li>{@code 404 Not Found}  – no resource with the given id</li>
+     * </ul>
+     *
+     * @param id the ID of the resource to delete
+     * @return {@code 204 No Content}
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteResource(@PathVariable Long id) {
+        resourceService.deleteResource(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ── Admin: Patch status ───────────────────────────────────────────────────
+
+    /**
+     * Admin endpoint: quick-toggles the status of a resource without affecting
+     * other fields.  Typically used to put a resource into {@code MAINTENANCE}
+     * or restore it to {@code AVAILABLE}.
+     *
+     * <ul>
+     *   <li>{@code 200 OK}        – status updated; returns the updated resource</li>
+     *   <li>{@code 400 Bad Request} – unknown status value</li>
+     *   <li>{@code 404 Not Found} – no resource with the given id</li>
+     * </ul>
+     *
+     * <p>Example request body:
+     * <pre>{@code
+     * { "status": "MAINTENANCE" }
+     * }</pre>
+     * </p>
+     *
+     * @param id   the ID of the resource to update
+     * @param body a JSON object with a single {@code "status"} key
+     * @return {@code 200 OK} with the updated resource
+     */
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Resource> patchStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+
+        Resource.Status newStatus;
+        try {
+            newStatus = Resource.Status.valueOf(body.get("status"));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        Resource result = resourceService.patchStatus(id, newStatus);
+        return ResponseEntity.ok(result);
     }
 }

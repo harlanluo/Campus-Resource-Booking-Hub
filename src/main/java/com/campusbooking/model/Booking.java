@@ -67,6 +67,6 @@ public class Booking {
     private Set<User> groupMembers = new HashSet<>();
 
     public enum Status {
-        PENDING, CONFIRMED, CANCELLED, COMPLETED
+        PENDING, CONFIRMED, CANCELLED, COMPLETED, APPROVED, REJECTED
     }
 }
