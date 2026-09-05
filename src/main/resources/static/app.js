@@ -14,6 +14,7 @@ const state = {
     email: 'alice@campus.edu'
   },
   resources: [],
+  kits: [],
   userBookings: [],
   userWaitlists: [],
   adminBookings: [],
@@ -23,7 +24,9 @@ const state = {
   searchQuery: '',
   adminBookingFilter: 'ALL',
   selectedResourceForBooking: null,
+  selectedKitForBooking: null,
   selectedResourceForQueue: null,
+  selectedGroupMembers: [],
 };
 
 // ============================================================================
@@ -76,6 +79,13 @@ const elements = {
   cancelBookingModalBtn: document.getElementById('cancelBookingModalBtn'),
   bookingForm: document.getElementById('bookingForm'),
   bookingResourceId: document.getElementById('bookingResourceId'),
+  bookingIsKit: document.getElementById('bookingIsKit'),
+  bookingKitId: document.getElementById('bookingKitId'),
+  kitItemsPreview: document.getElementById('kitItemsPreview'),
+  kitItemsChipsList: document.getElementById('kitItemsChipsList'),
+  groupMemberInput: document.getElementById('groupMemberInput'),
+  addGroupMemberBtn: document.getElementById('addGroupMemberBtn'),
+  groupMembersTagsContainer: document.getElementById('groupMembersTagsContainer'),
   bookingStartTime: document.getElementById('bookingStartTime'),
   bookingEndTime: document.getElementById('bookingEndTime'),
   modalBookingTitle: document.getElementById('modalBookingTitle'),
@@ -115,6 +125,7 @@ const elements = {
   toastContainer: document.getElementById('toastContainer'),
   quickStatsFooter: document.getElementById('quickStatsFooter')
 };
+
 
 // ============================================================================
 // API Service Layer
@@ -180,6 +191,7 @@ const api = {
       try {
         const json = JSON.parse(errorText);
         if (json.message) msg = json.message;
+        else if (json.error) msg = json.error;
       } catch (e) {
         if (errorText) msg = errorText;
       }
@@ -193,6 +205,41 @@ const api = {
     }
     return res.json();
   },
+
+  // Kits (Resource Bundles)
+  async getKits() {
+    const res = await fetch('/api/kits');
+    if (!res.ok) throw new Error('Failed to fetch project kits');
+    return res.json();
+  },
+
+  async bookKit(kitId, data) {
+    const res = await fetch(`/api/kits/${kitId}/book`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (res.status === 409) {
+      const errorText = await res.text();
+      let msg = 'Conflict detected! One or more bundled resources in this kit are unavailable or already booked.';
+      try {
+        const json = JSON.parse(errorText);
+        if (json.message) msg = json.message;
+        else if (json.error) msg = json.error;
+      } catch (e) {
+        if (errorText) msg = errorText;
+      }
+      const error = new Error(msg);
+      error.status = 409;
+      throw error;
+    }
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || 'Failed to book project kit');
+    }
+    return res.json();
+  },
+
 
   async cancelBooking(id) {
     const res = await fetch(`/api/bookings/${id}/cancel`, {
@@ -422,6 +469,7 @@ function handleUserChange() {
 async function loadAllData() {
   await Promise.all([
     loadResources(),
+    loadKits(),
     loadUserData(),
     loadAdminData()
   ]);
@@ -437,6 +485,17 @@ async function loadResources() {
     showToast('Error', 'Unable to fetch campus resources from server.', 'error');
   }
 }
+
+async function loadKits() {
+  try {
+    const data = await api.getKits();
+    state.kits = data;
+    renderResources();
+  } catch (err) {
+    console.error('Error loading project kits:', err);
+  }
+}
+
 
 async function loadUserData() {
   try {
@@ -490,43 +549,70 @@ function renderResources() {
   const grid = elements.resourcesGrid;
   grid.innerHTML = '';
 
-  let filtered = state.resources;
+  const isKitFilter = state.filterType === 'KIT';
+  const isAllFilter = state.filterType === 'ALL';
 
-  if (state.filterType !== 'ALL') {
-    filtered = filtered.filter((r) => r.type === state.filterType);
+  let filteredResources = state.resources;
+  let filteredKits = state.kits;
+
+  // Filter individual resources
+  if (!isKitFilter && !isAllFilter) {
+    filteredResources = filteredResources.filter((r) => r.type === state.filterType);
+  } else if (isKitFilter) {
+    filteredResources = []; // show only kits
   }
 
   if (state.filterOnlyAvailable) {
-    filtered = filtered.filter((r) => r.status === 'AVAILABLE');
+    filteredResources = filteredResources.filter((r) => r.status === 'AVAILABLE');
+    filteredKits = filteredKits.filter((k) =>
+      k.items && k.items.every((i) => i.status === 'AVAILABLE')
+    );
   }
 
   if (state.searchQuery.trim()) {
     const q = state.searchQuery.toLowerCase();
-    filtered = filtered.filter(
+    filteredResources = filteredResources.filter(
       (r) =>
         r.name.toLowerCase().includes(q) ||
         r.type.toLowerCase().includes(q) ||
         (r.description && r.description.toLowerCase().includes(q))
     );
+    filteredKits = filteredKits.filter(
+      (k) =>
+        k.name.toLowerCase().includes(q) ||
+        (k.description && k.description.toLowerCase().includes(q)) ||
+        (k.items && k.items.some((i) => i.name.toLowerCase().includes(q)))
+    );
   }
 
-  if (filtered.length === 0) {
+  const showKits = isKitFilter || isAllFilter;
+  const totalItemsCount = filteredResources.length + (showKits ? filteredKits.length : 0);
+
+  if (totalItemsCount === 0) {
     grid.innerHTML = `
       <div class="empty-state">
-        <p style="font-size: 1.1rem; font-weight: 600; color: var(--slate-700);">No matching resources found</p>
+        <p style="font-size: 1.1rem; font-weight: 600; color: var(--slate-700);">No matching items or project kits found</p>
         <p style="font-size: 0.875rem; margin-top: 0.25rem;">Try adjusting your filter chips or search keywords.</p>
       </div>
     `;
     return;
   }
 
+  // Render Project Kits first if filter is KIT or ALL
+  if (showKits && filteredKits.length > 0) {
+    filteredKits.forEach((kit) => {
+      grid.appendChild(renderKitCard(kit));
+    });
+  }
+
+  // Render individual resources
   const typeIcons = {
     ROOM: '🏢',
     LAB: '💻',
     EQUIPMENT: '📽️'
   };
 
-  filtered.forEach((resource) => {
+  filteredResources.forEach((resource) => {
     const card = document.createElement('div');
     card.className = 'resource-card';
 
@@ -594,6 +680,68 @@ function renderResources() {
   });
 }
 
+function renderKitCard(kit) {
+  const card = document.createElement('div');
+  card.className = 'resource-card kit-card';
+
+  const allAvailable = kit.items && kit.items.every((i) => i.status === 'AVAILABLE');
+
+  const itemsHtml = kit.items
+    ? kit.items
+        .map(
+          (item) => `
+        <li class="kit-item-row">
+          <span class="item-name">
+            <span>${item.type === 'ROOM' ? '🏢' : item.type === 'LAB' ? '💻' : '📽️'}</span>
+            <span>${escapeHtml(item.name)}</span>
+          </span>
+          <span class="item-status-pill ${item.status}">${escapeHtml(item.status)}</span>
+        </li>
+      `
+        )
+        .join('')
+    : '';
+
+  card.innerHTML = `
+    <div>
+      <div class="resource-card-header">
+        <div class="resource-icon-wrap kit">
+          📦
+        </div>
+        <div class="resource-badge-group">
+          <span class="type-badge KIT">PROJECT KIT</span>
+          <span class="status-badge ${allAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}">
+            <span class="dot"></span>
+            <span>${allAvailable ? 'ALL AVAILABLE' : 'SOME BUSY'}</span>
+          </span>
+        </div>
+      </div>
+
+      <h3 class="resource-name">${escapeHtml(kit.name)}</h3>
+      <p class="resource-desc">${escapeHtml(kit.description || 'Pre-configured project equipment bundle.')}</p>
+
+      <div class="kit-bundle-section">
+        <div class="kit-bundle-title">
+          <span>📦 Bundled Package (${kit.itemCount} Items)</span>
+        </div>
+        <ul class="kit-items-list">
+          ${itemsHtml}
+        </ul>
+      </div>
+    </div>
+
+    <div class="resource-card-actions">
+      <button class="btn btn-book-kit btn-sm book-kit-btn" data-kit-id="${kit.id}">
+        <span>⚡ Book Entire Kit (${kit.itemCount} Items)</span>
+      </button>
+    </div>
+  `;
+
+  card.querySelector('.book-kit-btn').addEventListener('click', () => openKitBookingModal(kit));
+  return card;
+}
+
+
 // ============================================================================
 // Render: Tab 2 (My Bookings & Waitlist)
 // ============================================================================
@@ -629,22 +777,58 @@ function renderMyBookings() {
       booking.status === 'APPROVED';
 
     const duration = formatDuration(booking.startTime, booking.endTime);
+    const isOwner = booking.userId === state.currentUser.id;
+    const isGroup = booking.groupBooking || (booking.groupMemberNames && booking.groupMemberNames.length > 0);
+
+    let groupBadgeHtml = '';
+    let coMembersHtml = '';
+
+    if (isGroup) {
+      groupBadgeHtml = `
+        <span class="group-booking-badge" title="Collaborative Group Booking">
+          <span>👥 Group Booking</span>
+        </span>
+      `;
+
+      if (isOwner && booking.groupMemberNames && booking.groupMemberNames.length > 0) {
+        coMembersHtml = `
+          <div class="co-members-banner">
+            <span><strong>Organizer:</strong> You (Owner)</span>
+            <span>•</span>
+            <span><strong>Co-Members:</strong></span>
+            <div class="co-members-list">
+              ${booking.groupMemberNames.map((name) => `<span class="co-member-pill">👤 ${escapeHtml(name)}</span>`).join('')}
+            </div>
+          </div>
+        `;
+      } else if (!isOwner) {
+        coMembersHtml = `
+          <div class="co-members-banner">
+            <span><strong>Organizer:</strong> ${escapeHtml(booking.username)}</span>
+            <span>•</span>
+            <span><strong>Status:</strong> You are an invited co-member</span>
+          </div>
+        `;
+      }
+    }
 
     card.innerHTML = `
-      <div class="booking-info-group">
+      <div class="booking-info-group" style="flex: 1;">
         <div class="booking-resource-icon">
           ${typeIcons[booking.resourceType] || '📦'}
         </div>
-        <div class="booking-main-details">
-          <div class="booking-resource-title">
+        <div class="booking-main-details" style="flex: 1;">
+          <div class="booking-resource-title" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             <span>${escapeHtml(booking.resourceName)}</span>
             <span class="type-badge ${booking.resourceType}">${escapeHtml(booking.resourceType)}</span>
+            ${groupBadgeHtml}
           </div>
           <div class="booking-time-line">
             <span>🗓️ ${formatDateTime(booking.startTime)} &rarr; ${formatDateTime(booking.endTime)}</span>
             <span>•</span>
             <span>⏳ ${duration}</span>
           </div>
+          ${coMembersHtml}
         </div>
       </div>
 
@@ -667,6 +851,7 @@ function renderMyBookings() {
 
     container.appendChild(card);
   });
+
 }
 
 function renderMyWaitlists() {
@@ -852,14 +1037,88 @@ function renderAdminResourcesTable() {
 // Booking Modal Open & Presets
 function openBookingModal(resource) {
   state.selectedResourceForBooking = resource;
+  state.selectedKitForBooking = null;
+  state.selectedGroupMembers = [];
 
+  elements.bookingIsKit.value = 'false';
+  elements.bookingKitId.value = '';
   elements.bookingResourceId.value = resource.id;
+
   elements.modalBookingTitle.textContent = `Reserve ${resource.name}`;
   elements.modalResourceSubtitle.textContent = `${resource.name} • ${resource.type}`;
   elements.modalUserName.textContent = `${state.currentUser.name} (ID: ${state.currentUser.id})`;
 
   const typeIcons = { ROOM: '🏢', LAB: '💻', EQUIPMENT: '📽️' };
   elements.modalResourceIcon.textContent = typeIcons[resource.type] || '🏛️';
+
+  // Hide Kit items preview
+  elements.kitItemsPreview.style.display = 'none';
+
+  // Reset & Render group member tags
+  if (elements.groupMemberInput) elements.groupMemberInput.value = '';
+  renderGroupMemberTags();
+
+  // Hide conflict banner from any previous attempt
+  elements.conflictBanner.style.display = 'none';
+
+  // Set min constraint to current local time
+  const now = new Date();
+  const minNowIso = getLocalIsoString(now);
+  elements.bookingStartTime.min = minNowIso;
+
+  // Default times: Tomorrow 09:00 to 11:00
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(9, 0, 0, 0);
+
+  const tomorrowEnd = new Date(tomorrow);
+  tomorrowEnd.setHours(11, 0, 0, 0);
+
+  const startVal = getLocalIsoString(tomorrow);
+  const endVal = getLocalIsoString(tomorrowEnd);
+
+  elements.bookingStartTime.value = startVal;
+  elements.bookingEndTime.min = startVal;
+  elements.bookingEndTime.value = endVal;
+
+  updateDurationPreview();
+
+  elements.bookingModalBackdrop.classList.add('open');
+  elements.bookingStartTime.focus();
+}
+
+function openKitBookingModal(kit) {
+  state.selectedKitForBooking = kit;
+  state.selectedResourceForBooking = null;
+  state.selectedGroupMembers = [];
+
+  elements.bookingIsKit.value = 'true';
+  elements.bookingKitId.value = kit.id;
+  elements.bookingResourceId.value = '';
+
+  elements.modalBookingTitle.textContent = `Reserve ${kit.name}`;
+  elements.modalResourceSubtitle.textContent = `Project Kit Bundle • ${kit.itemCount} Items`;
+  elements.modalResourceIcon.textContent = '📦';
+  elements.modalUserName.textContent = `${state.currentUser.name} (ID: ${state.currentUser.id})`;
+
+  // Display bundled items list in modal
+  elements.kitItemsPreview.style.display = 'block';
+  elements.kitItemsChipsList.innerHTML = kit.items
+    ? kit.items
+        .map(
+          (item) => `
+        <span class="kit-subitem-chip">
+          <span>✓</span>
+          <span>${escapeHtml(item.name)}</span>
+        </span>
+      `
+        )
+        .join('')
+    : '';
+
+  // Reset & Render group member tags
+  if (elements.groupMemberInput) elements.groupMemberInput.value = '';
+  renderGroupMemberTags();
 
   // Hide conflict banner from any previous attempt
   elements.conflictBanner.style.display = 'none';
@@ -893,6 +1152,73 @@ function openBookingModal(resource) {
 function closeBookingModal() {
   elements.bookingModalBackdrop.classList.remove('open');
   state.selectedResourceForBooking = null;
+  state.selectedKitForBooking = null;
+  state.selectedGroupMembers = [];
+}
+
+// Group Member Tag Helpers
+function addGroupMemberFromInput() {
+  const input = elements.groupMemberInput;
+  if (!input) return;
+  const raw = input.value.trim();
+  if (!raw) return;
+
+  const isId = /^\d+$/.test(raw);
+  const memberObj = isId
+    ? { id: Number(raw), display: `Peer ID: ${raw}` }
+    : { username: raw, display: `@${raw}` };
+
+  if (isId && Number(raw) === state.currentUser.id) {
+    showToast('Notice', 'You are automatically included as the reservation owner.', 'info', 2500);
+    input.value = '';
+    return;
+  }
+  if (!isId && raw.toLowerCase() === state.currentUser.name.toLowerCase()) {
+    showToast('Notice', 'You are automatically included as the reservation owner.', 'info', 2500);
+    input.value = '';
+    return;
+  }
+
+  const exists = state.selectedGroupMembers.some((m) =>
+    isId ? m.id === memberObj.id : m.username && m.username.toLowerCase() === memberObj.username.toLowerCase()
+  );
+
+  if (exists) {
+    showToast('Notice', 'This member is already added to the group list.', 'warning', 2000);
+    input.value = '';
+    return;
+  }
+
+  state.selectedGroupMembers.push(memberObj);
+  input.value = '';
+  renderGroupMemberTags();
+}
+
+function removeGroupMember(index) {
+  state.selectedGroupMembers.splice(index, 1);
+  renderGroupMemberTags();
+}
+
+function renderGroupMemberTags() {
+  const container = elements.groupMembersTagsContainer;
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (state.selectedGroupMembers.length === 0) {
+    container.innerHTML = '<span style="font-size: 0.75rem; color: var(--slate-400); font-style: italic;">No peers added yet.</span>';
+    return;
+  }
+
+  state.selectedGroupMembers.forEach((member, index) => {
+    const tag = document.createElement('span');
+    tag.className = 'member-tag';
+    tag.innerHTML = `
+      <span>👤 ${escapeHtml(member.display)}</span>
+      <button type="button" class="member-tag-remove" aria-label="Remove peer">&times;</button>
+    `;
+    tag.querySelector('.member-tag-remove').addEventListener('click', () => removeGroupMember(index));
+    container.appendChild(tag);
+  });
 }
 
 function handleStartTimeChange() {
@@ -961,7 +1287,6 @@ function setPreset(daysAhead, startHour, durationHours) {
 async function handleBookingSubmit(e) {
   e.preventDefault();
 
-  const resourceId = Number(elements.bookingResourceId.value);
   const startTime = elements.bookingStartTime.value;
   const endTime = elements.bookingEndTime.value;
 
@@ -981,28 +1306,59 @@ async function handleBookingSubmit(e) {
     return;
   }
 
-  const payload = {
-    userId: state.currentUser.id,
-    resourceId: resourceId,
-    startTime: startTime,
-    endTime: endTime
-  };
+  const memberUserIds = state.selectedGroupMembers
+    .filter((m) => m.id !== undefined)
+    .map((m) => m.id);
+  const memberUsernames = state.selectedGroupMembers
+    .filter((m) => m.username !== undefined)
+    .map((m) => m.username);
+
+  const isKit = elements.bookingIsKit.value === 'true';
+  const kitId = Number(elements.bookingKitId.value);
+  const resourceId = Number(elements.bookingResourceId.value);
 
   const submitBtn = document.getElementById('submitBookingBtn');
   const btnText = submitBtn.querySelector('.btn-text');
 
   try {
     submitBtn.disabled = true;
-    if (btnText) btnText.textContent = 'Verifying Slot...';
+    if (btnText) btnText.textContent = isKit ? 'Reserving All Kit Items...' : 'Verifying Slot...';
 
-    await api.createBooking(payload);
+    if (isKit && kitId) {
+      const payload = {
+        userId: state.currentUser.id,
+        startTime: startTime,
+        endTime: endTime,
+        memberUserIds: memberUserIds.length ? memberUserIds : undefined,
+        memberUsernames: memberUsernames.length ? memberUsernames : undefined
+      };
 
-    closeBookingModal();
-    showToast(
-      'Reservation Confirmed!',
-      `Successfully reserved ${state.selectedResourceForBooking?.name || 'Resource'} (Status: PENDING Approval).`,
-      'success'
-    );
+      const results = await api.bookKit(kitId, payload);
+      closeBookingModal();
+      showToast(
+        'Project Kit Reserved!',
+        `Successfully booked all ${results.length} bundled items for "${state.selectedKitForBooking?.name || 'Kit'}" (Status: PENDING Approval)!`,
+        'success',
+        5000
+      );
+    } else {
+      const payload = {
+        userId: state.currentUser.id,
+        resourceId: resourceId,
+        startTime: startTime,
+        endTime: endTime,
+        memberUserIds: memberUserIds.length ? memberUserIds : undefined,
+        memberUsernames: memberUsernames.length ? memberUsernames : undefined
+      };
+
+      await api.createBooking(payload);
+      closeBookingModal();
+      showToast(
+        'Reservation Confirmed!',
+        `Successfully reserved ${state.selectedResourceForBooking?.name || 'Resource'} (Status: PENDING Approval).`,
+        'success'
+      );
+    }
 
     await loadAllData();
   } catch (err) {
@@ -1010,7 +1366,7 @@ async function handleBookingSubmit(e) {
       // Smart Conflict Display
       elements.conflictBanner.style.display = 'flex';
       elements.conflictMessage.textContent = err.message;
-      showToast('Conflict Detected', err.message, 'error');
+      showToast('Conflict Detected', err.message, 'error', 5500);
     } else {
       showToast('Booking Failed', err.message || 'Server error occurred.', 'error');
     }
@@ -1019,6 +1375,7 @@ async function handleBookingSubmit(e) {
     if (btnText) btnText.textContent = 'Confirm Booking';
   }
 }
+
 
 // Direct Waitlist Join from Conflict Banner
 async function handleJoinWaitlistFromConflict() {
@@ -1284,10 +1641,24 @@ function setupEventListeners() {
   elements.bookingForm.addEventListener('submit', handleBookingSubmit);
   elements.joinWaitlistFromConflictBtn.addEventListener('click', handleJoinWaitlistFromConflict);
 
+  // Add Group Member Button & Enter key
+  if (elements.addGroupMemberBtn) {
+    elements.addGroupMemberBtn.addEventListener('click', addGroupMemberFromInput);
+  }
+  if (elements.groupMemberInput) {
+    elements.groupMemberInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addGroupMemberFromInput();
+      }
+    });
+  }
+
   // Presets
   elements.presetTomorrowMorning.addEventListener('click', () => setPreset(1, 9, 2));
   elements.presetTomorrowAfternoon.addEventListener('click', () => setPreset(1, 14, 2));
   elements.presetNextDay.addEventListener('click', () => setPreset(2, 10, 2));
+
 
   // Add Resource Modal
   elements.openAddResourceModalBtn.addEventListener('click', openAddResourceModal);

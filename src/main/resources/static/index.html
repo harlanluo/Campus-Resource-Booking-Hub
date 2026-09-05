@@ -118,6 +118,7 @@
             <button class="chip" data-filter="ROOM">🏛️ Study Rooms</button>
             <button class="chip" data-filter="LAB">💻 Computer Labs</button>
             <button class="chip" data-filter="EQUIPMENT">📽️ Equipment</button>
+            <button class="chip" data-filter="KIT">📦 Project Kits</button>
             <button class="chip-toggle" id="onlyAvailableToggle">
               <span class="toggle-switch"></span>
               <span>Available Only</span>
@@ -373,7 +374,17 @@
 
       <form id="bookingForm" class="modal-form">
         <input type="hidden" id="bookingResourceId" />
+        <input type="hidden" id="bookingIsKit" value="false" />
+        <input type="hidden" id="bookingKitId" />
         
+        <!-- Kit Bundled Items List Preview (only visible when booking a kit) -->
+        <div class="kit-items-preview" id="kitItemsPreview" style="display: none;">
+          <label class="section-label">📦 Bundled Sub-Items Included:</label>
+          <div class="kit-items-chips-list" id="kitItemsChipsList">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label for="bookingStartTime">Start Time <span class="required">*</span></label>
@@ -393,6 +404,21 @@
             <button type="button" class="preset-btn" id="presetTomorrowAfternoon">Tomorrow 2pm - 4pm</button>
             <button type="button" class="preset-btn" id="presetNextDay">Next Day 10am - 12pm</button>
           </div>
+        </div>
+
+        <!-- Collaborative Group Members Section -->
+        <div class="form-group group-members-section">
+          <label for="groupMemberInput">👥 Add Group Members (Student IDs or Usernames)</label>
+          <div class="group-member-input-row">
+            <input type="text" id="groupMemberInput" placeholder="Enter student ID (e.g. 2) or username..." autocomplete="off" />
+            <button type="button" class="btn btn-secondary btn-sm" id="addGroupMemberBtn">
+              <span>+ Add Peer</span>
+            </button>
+          </div>
+          <div class="group-members-tags" id="groupMembersTagsContainer">
+            <!-- Dynamic tags will appear here -->
+          </div>
+          <span class="form-help-text">Invite peers to collaborate on this reservation. All members will see this in their shared bookings.</span>
         </div>
 
         <div class="booking-summary-box">
@@ -416,6 +442,7 @@
       </form>
     </div>
   </div>
+
 
   <!-- MODAL: ADD RESOURCE (ADMIN) -->
   <div class="modal-backdrop" id="addResourceModalBackdrop" aria-hidden="true">
