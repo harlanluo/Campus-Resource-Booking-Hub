@@ -40,4 +40,15 @@ public class BookingRequestDTO {
      */
     @NotNull(message = "endTime must not be null")
     private LocalDateTime endTime;
+
+    /**
+     * Optional list of user IDs for invited group members (collaborative booking).
+     */
+    private java.util.List<Long> memberUserIds;
+
+    /**
+     * Optional list of usernames for invited group members.
+     */
+    private java.util.List<String> memberUsernames;
 }
+

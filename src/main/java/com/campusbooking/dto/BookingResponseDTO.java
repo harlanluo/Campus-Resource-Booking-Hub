@@ -51,6 +51,17 @@ public class BookingResponseDTO {
     /** Current lifecycle status of the booking. */
     private Booking.Status status;
 
+    // ── Group Booking Summary ────────────────────────────────────────────────
+    /** IDs of invited co-members for group bookings. */
+    private java.util.List<Long> groupMemberIds;
+
+    /** Usernames of invited co-members for group bookings. */
+    private java.util.List<String> groupMemberNames;
+
+    /** Indicates whether this booking is a collaborative group booking with peers. */
+    private boolean groupBooking;
+
+
     // ── Factory ───────────────────────────────────────────────────────────────
 
     /**
@@ -60,6 +71,18 @@ public class BookingResponseDTO {
      * @return a fully-populated {@code BookingResponseDTO}
      */
     public static BookingResponseDTO from(Booking booking) {
+        java.util.List<Long> memberIds = java.util.Collections.emptyList();
+        java.util.List<String> memberNames = java.util.Collections.emptyList();
+
+        if (booking.getGroupMembers() != null && !booking.getGroupMembers().isEmpty()) {
+            memberIds = booking.getGroupMembers().stream()
+                    .map(com.campusbooking.model.User::getId)
+                    .toList();
+            memberNames = booking.getGroupMembers().stream()
+                    .map(com.campusbooking.model.User::getUsername)
+                    .toList();
+        }
+
         return BookingResponseDTO.builder()
                 .bookingId(booking.getId())
                 .userId(booking.getUser().getId())
@@ -70,6 +93,10 @@ public class BookingResponseDTO {
                 .startTime(booking.getStartTime())
                 .endTime(booking.getEndTime())
                 .status(booking.getStatus())
+                .groupMemberIds(memberIds)
+                .groupMemberNames(memberNames)
+                .groupBooking(!memberNames.isEmpty())
                 .build();
     }
 }
+

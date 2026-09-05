@@ -28,6 +28,22 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByUserId(Long userId);
 
     /**
+     * Returns all bookings where the user is either the primary creator (owner)
+     * OR an invited collaborative group member.
+     *
+     * @param userId the ID of the user
+     * @return list of matching bookings, ordered by startTime descending
+     */
+    @Query("""
+           SELECT DISTINCT b FROM Booking b
+           LEFT JOIN b.groupMembers m
+           WHERE b.user.id = :userId OR m.id = :userId
+           ORDER BY b.startTime DESC
+           """)
+    List<Booking> findAllUserBookings(@Param("userId") Long userId);
+
+
+    /**
      * Returns all bookings for a specific resource.
      *
      * @param resourceId the ID of the resource

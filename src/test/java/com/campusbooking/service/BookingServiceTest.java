@@ -178,7 +178,46 @@ class BookingServiceTest {
 
             assertThat(response.getStatus()).isEqualTo(Booking.Status.PENDING);
         }
+
+        @Test
+        @DisplayName("Creates collaborative group booking and attaches invited members")
+        void whenGroupMembersProvided_thenMembersAreAttached() {
+            User peerUser = User.builder()
+                    .id(3L)
+                    .username("charlie_student")
+                    .email("charlie@campus.edu")
+                    .role(User.Role.STUDENT)
+                    .build();
+
+            BookingRequestDTO request = buildRequest();
+            request.setMemberUserIds(List.of(peerUser.getId()));
+
+            given(userRepository.findById(testUser.getId())).willReturn(Optional.of(testUser));
+            given(resourceRepository.findById(testResource.getId())).willReturn(Optional.of(testResource));
+            given(bookingRepository.findOverlappingBookings(anyLong(), any(), any())).willReturn(Collections.emptyList());
+            given(userRepository.findById(peerUser.getId())).willReturn(Optional.of(peerUser));
+
+            given(bookingRepository.save(any(Booking.class))).willAnswer(inv -> {
+                Booking b = inv.getArgument(0);
+                return Booking.builder()
+                        .id(101L)
+                        .user(b.getUser())
+                        .resource(b.getResource())
+                        .startTime(b.getStartTime())
+                        .endTime(b.getEndTime())
+                        .status(b.getStatus())
+                        .groupMembers(b.getGroupMembers())
+                        .build();
+            });
+
+            BookingResponseDTO response = bookingService.createBooking(request);
+
+            assertThat(response.isGroupBooking()).isTrue();
+            assertThat(response.getGroupMemberNames()).containsExactly("charlie_student");
+            assertThat(response.getGroupMemberIds()).containsExactly(3L);
+        }
     }
+
 
     // =========================================================================
     // createBooking — conflict
@@ -350,7 +389,7 @@ class BookingServiceTest {
     class GetUserBookings {
 
         @Test
-        @DisplayName("Returns mapped DTOs for a user with bookings")
+        @DisplayName("Returns mapped DTOs for a user with bookings (as creator)")
         void whenUserExists_thenReturnsBookings() {
             Booking b = Booking.builder()
                     .id(20L).user(testUser).resource(testResource)
@@ -359,12 +398,44 @@ class BookingServiceTest {
                     .build();
 
             given(userRepository.existsById(testUser.getId())).willReturn(true);
-            given(bookingRepository.findByUserId(testUser.getId())).willReturn(List.of(b));
+            given(bookingRepository.findAllUserBookings(testUser.getId())).willReturn(List.of(b));
 
             List<BookingResponseDTO> result = bookingService.getUserBookings(testUser.getId());
 
             assertThat(result).hasSize(1);
             assertThat(result.get(0).getBookingId()).isEqualTo(20L);
+        }
+
+        @Test
+        @DisplayName("Returns shared bookings where user is an invited co-member")
+        void whenUserIsGroupMember_thenReturnsSharedBookings() {
+            User creator = User.builder()
+                    .id(5L)
+                    .username("creator_user")
+                    .email("creator@campus.edu")
+                    .role(User.Role.STUDENT)
+                    .build();
+
+            Booking sharedBooking = Booking.builder()
+                    .id(25L)
+                    .user(creator)
+                    .resource(testResource)
+                    .startTime(futureStart)
+                    .endTime(futureEnd)
+                    .status(Booking.Status.CONFIRMED)
+                    .groupMembers(java.util.Set.of(testUser))
+                    .build();
+
+            given(userRepository.existsById(testUser.getId())).willReturn(true);
+            given(bookingRepository.findAllUserBookings(testUser.getId())).willReturn(List.of(sharedBooking));
+
+            List<BookingResponseDTO> result = bookingService.getUserBookings(testUser.getId());
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getBookingId()).isEqualTo(25L);
+            assertThat(result.get(0).getUsername()).isEqualTo("creator_user");
+            assertThat(result.get(0).isGroupBooking()).isTrue();
+            assertThat(result.get(0).getGroupMemberNames()).contains("alice_student");
         }
 
         @Test
@@ -377,6 +448,7 @@ class BookingServiceTest {
                     .hasMessageContaining("404");
         }
     }
+
 
     // =========================================================================
     // cancelBooking

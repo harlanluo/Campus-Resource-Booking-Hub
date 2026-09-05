@@ -121,13 +121,39 @@ public class BookingService {
                     "Resource is already booked during this time slot");
         }
 
-        // 7. Persist the new booking
+        // 7. Resolve group members (if any) ──────────────────────────────────
+        java.util.Set<User> groupMembers = new java.util.HashSet<>();
+        if (request.getMemberUserIds() != null) {
+            for (Long memberId : request.getMemberUserIds()) {
+                if (memberId != null && !memberId.equals(user.getId())) {
+                    User member = userRepository.findById(memberId)
+                            .orElseThrow(() -> new ResponseStatusException(
+                                    HttpStatus.NOT_FOUND,
+                                    "Group member not found with id: " + memberId));
+                    groupMembers.add(member);
+                }
+            }
+        }
+        if (request.getMemberUsernames() != null) {
+            for (String uname : request.getMemberUsernames()) {
+                if (uname != null && !uname.isBlank() && !uname.equalsIgnoreCase(user.getUsername())) {
+                    User member = userRepository.findByUsername(uname.trim())
+                            .orElseThrow(() -> new ResponseStatusException(
+                                    HttpStatus.NOT_FOUND,
+                                    "Group member not found with username: " + uname));
+                    groupMembers.add(member);
+                }
+            }
+        }
+
+        // 8. Persist the new booking
         Booking booking = Booking.builder()
                 .user(user)
                 .resource(resource)
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
                 .status(Booking.Status.PENDING)
+                .groupMembers(groupMembers)
                 .build();
 
         Booking saved = bookingRepository.save(booking);
@@ -137,7 +163,8 @@ public class BookingService {
     // ── Read ──────────────────────────────────────────────────────────────────
 
     /**
-     * Returns all bookings made by a specific user.
+     * Returns all bookings where the user is either the primary creator
+     * or an invited collaborative group member.
      *
      * @param userId the ID of the user
      * @return list of the user's bookings as DTOs (may be empty)
@@ -151,11 +178,12 @@ public class BookingService {
                     "User not found with id: " + userId);
         }
 
-        return bookingRepository.findByUserId(userId)
+        return bookingRepository.findAllUserBookings(userId)
                 .stream()
                 .map(BookingResponseDTO::from)
                 .toList();
     }
+
 
     /**
      * Returns all bookings in the system regardless of user (for Admin overview).
