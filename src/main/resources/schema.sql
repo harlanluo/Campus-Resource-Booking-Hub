@@ -55,3 +55,19 @@ CREATE TABLE IF NOT EXISTS group_booking_members (
     CONSTRAINT fk_gbm_booking FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE,
     CONSTRAINT fk_gbm_user    FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE
 );
+
+-- Pre-configured Resource Bundles / Project Kits
+CREATE TABLE IF NOT EXISTS kits (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(500)
+);
+
+-- Junction table linking kits with bundled resources
+CREATE TABLE IF NOT EXISTS kit_items (
+    kit_id      BIGINT NOT NULL,
+    resource_id BIGINT NOT NULL,
+    PRIMARY KEY (kit_id, resource_id),
+    CONSTRAINT fk_kit_items_kit      FOREIGN KEY (kit_id)      REFERENCES kits(id)      ON DELETE CASCADE,
+    CONSTRAINT fk_kit_items_resource FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+);

@@ -42,8 +42,10 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleBookingConflict(
             BookingConflictException ex) {
 
-        return errorBody(HttpStatus.CONFLICT,
-                "Resource is already booked for the selected time slot.");
+        String message = (ex.getMessage() != null && !ex.getMessage().isBlank())
+                ? ex.getMessage()
+                : "Resource is already booked for the selected time slot.";
+        return errorBody(HttpStatus.CONFLICT, message);
     }
 
     // ── ResponseStatusException ───────────────────────────────────────────────
@@ -109,7 +111,8 @@ public class GlobalExceptionHandler {
      * {
      *   "timestamp": "2025-09-01T10:00:00",
      *   "status":    409,
-     *   "error":     "Resource is already booked for the selected time slot."
+     *   "error":     "Resource is already booked for the selected time slot.",
+     *   "message":   "Resource is already booked for the selected time slot."
      * }
      * }</pre>
      *
@@ -122,6 +125,8 @@ public class GlobalExceptionHandler {
         body.put("timestamp", LocalDateTime.now().toString());
         body.put("status",    status.value());
         body.put("error",     message);
+        body.put("message",   message);
         return ResponseEntity.status(status).body(body);
     }
 }
+
