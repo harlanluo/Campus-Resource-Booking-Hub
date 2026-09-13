@@ -113,7 +113,7 @@ class BookingServiceTest {
 
             given(userRepository.findById(testUser.getId()))
                     .willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(testResource.getId()))
+            given(resourceRepository.findByIdForUpdate(testResource.getId()))
                     .willReturn(Optional.of(testResource));
             given(bookingRepository.findOverlappingBookings(
                     eq(testResource.getId()), any(), any()))
@@ -156,7 +156,7 @@ class BookingServiceTest {
 
             given(userRepository.findById(anyLong()))
                     .willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(anyLong()))
+            given(resourceRepository.findByIdForUpdate(anyLong()))
                     .willReturn(Optional.of(testResource));
             given(bookingRepository.findOverlappingBookings(anyLong(), any(), any()))
                     .willReturn(Collections.emptyList());
@@ -194,7 +194,7 @@ class BookingServiceTest {
             request.setMemberUserIds(List.of(peerUser.getId()));
 
             given(userRepository.findById(testUser.getId())).willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(testResource.getId())).willReturn(Optional.of(testResource));
+            given(resourceRepository.findByIdForUpdate(testResource.getId())).willReturn(Optional.of(testResource));
             given(bookingRepository.findOverlappingBookings(anyLong(), any(), any())).willReturn(Collections.emptyList());
             given(userRepository.findById(peerUser.getId())).willReturn(Optional.of(peerUser));
 
@@ -236,7 +236,7 @@ class BookingServiceTest {
 
             given(userRepository.findById(testUser.getId()))
                     .willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(testResource.getId()))
+            given(resourceRepository.findByIdForUpdate(testResource.getId()))
                     .willReturn(Optional.of(testResource));
 
             // Simulate an existing booking that overlaps the requested window
@@ -269,7 +269,7 @@ class BookingServiceTest {
 
             given(userRepository.findById(anyLong()))
                     .willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(anyLong()))
+            given(resourceRepository.findByIdForUpdate(anyLong()))
                     .willReturn(Optional.of(testResource));
 
             Booking pendingConflict = Booking.builder()
@@ -319,7 +319,7 @@ class BookingServiceTest {
 
             given(userRepository.findById(anyLong()))
                     .willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(anyLong()))
+            given(resourceRepository.findByIdForUpdate(anyLong()))
                     .willReturn(Optional.empty());
 
             assertThatThrownBy(() -> bookingService.createBooking(request))
@@ -339,7 +339,7 @@ class BookingServiceTest {
 
             given(userRepository.findById(anyLong()))
                     .willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(anyLong()))
+            given(resourceRepository.findByIdForUpdate(anyLong()))
                     .willReturn(Optional.of(maintenance));
 
             assertThatThrownBy(() -> bookingService.createBooking(request))
@@ -356,7 +356,7 @@ class BookingServiceTest {
 
             given(userRepository.findById(anyLong()))
                     .willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(anyLong()))
+            given(resourceRepository.findByIdForUpdate(anyLong()))
                     .willReturn(Optional.of(testResource));
 
             assertThatThrownBy(() -> bookingService.createBooking(request))
@@ -372,7 +372,7 @@ class BookingServiceTest {
 
             given(userRepository.findById(anyLong()))
                     .willReturn(Optional.of(testUser));
-            given(resourceRepository.findById(anyLong()))
+            given(resourceRepository.findByIdForUpdate(anyLong()))
                     .willReturn(Optional.of(testResource));
 
             assertThatThrownBy(() -> bookingService.createBooking(request))

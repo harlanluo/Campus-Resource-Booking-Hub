@@ -10,6 +10,7 @@ import com.campusbooking.model.Resource;
 import com.campusbooking.model.User;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.KitRepository;
+import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,6 +46,9 @@ class KitServiceTest {
 
     @Mock
     private BookingRepository bookingRepository;
+
+    @Mock
+    private ResourceRepository resourceRepository;
 
     @InjectMocks
     private KitService kitService;
