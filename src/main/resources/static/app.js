@@ -146,6 +146,16 @@ const elements = {
 // API Service Layer
 // ============================================================================
 const api = {
+  async login(username, password) {
+    const res = await fetch('/api/users/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) throw new Error('Authentication failed');
+    return res.json();
+  },
+
   // Resources
   async getResources() {
     const res = await fetch('/api/resources');
@@ -498,31 +508,49 @@ function switchTab(tabId) {
 // ============================================================================
 // User Switching
 // ============================================================================
-function handleUserChange() {
+async function handleUserChange(options = {}) {
+  const { showNotice = true, reload = true } = options;
   const selectedOption = elements.userSelect.selectedOptions[0];
-  state.currentUser = {
-    id: Number(elements.userSelect.value),
-    role: selectedOption.dataset.role,
-    name: selectedOption.dataset.name,
-    email: selectedOption.dataset.email
-  };
+  elements.userSelect.disabled = true;
 
-  elements.currentUserAvatar.textContent = state.currentUser.name.charAt(0);
-  elements.modalUserName.textContent = `${state.currentUser.name} (ID: ${state.currentUser.id})`;
+  try {
+    const authenticated = await api.login(selectedOption.dataset.username, 'password123');
+    state.currentUser = {
+      id: authenticated.userId,
+      role: authenticated.role,
+      name: selectedOption.dataset.name,
+      email: authenticated.email
+    };
 
-  updateRoleBasedVisibility();
-  renderResources();
+    elements.currentUserAvatar.textContent = state.currentUser.name.charAt(0);
+    elements.modalUserName.textContent = `${state.currentUser.name} (ID: ${state.currentUser.id})`;
 
-  showToast(
-    'User Switched',
-    `Active Profile: ${state.currentUser.name} (${state.currentUser.role})`,
-    'info',
-    2500
-  );
+    updateRoleBasedVisibility();
+    renderResources();
 
-  loadUserData();
-  if (state.currentUser.role === 'ADMIN') {
-    loadAdminData();
+    if (showNotice) {
+      showToast(
+        'Authenticated',
+        `Signed in as ${state.currentUser.name} (${state.currentUser.role})`,
+        'info',
+        2500
+      );
+    }
+
+    if (reload) {
+      await loadUserData();
+      if (state.currentUser.role === 'ADMIN') {
+        await loadAdminData();
+      } else {
+        state.adminBookings = [];
+        state.adminIssues = [];
+      }
+    }
+  } catch (err) {
+    showToast('Authentication Error', err.message, 'error');
+    throw err;
+  } finally {
+    elements.userSelect.disabled = false;
   }
 }
 
@@ -530,12 +558,15 @@ function handleUserChange() {
 // Data Loading & Syncing
 // ============================================================================
 async function loadAllData() {
-  await Promise.all([
+  const loaders = [
     loadResources(),
     loadKits(),
-    loadUserData(),
-    loadAdminData()
-  ]);
+    loadUserData()
+  ];
+  if (state.currentUser.role === 'ADMIN') {
+    loaders.push(loadAdminData());
+  }
+  await Promise.all(loaders);
 }
 
 async function loadResources() {
@@ -1800,7 +1831,7 @@ function setupEventListeners() {
   });
 
   // User Select
-  elements.userSelect.addEventListener('change', handleUserChange);
+  elements.userSelect.addEventListener('change', () => handleUserChange());
 
   // Search & Filters
   elements.resourceSearchInput.addEventListener('input', (e) => {
@@ -1915,6 +1946,7 @@ function setupEventListeners() {
 // ============================================================================
 async function initApp() {
   setupEventListeners();
+  await handleUserChange({ showNotice: false, reload: false });
   updateRoleBasedVisibility();
   await loadAllData();
   console.log('Campus Booking Hub Frontend Initialized.');

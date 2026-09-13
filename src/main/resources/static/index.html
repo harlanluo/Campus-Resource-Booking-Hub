@@ -72,8 +72,8 @@
           <div class="user-pill">
             <div class="user-avatar" id="currentUserAvatar">A</div>
             <select id="userSelect" class="user-dropdown" aria-label="Select active user">
-              <option value="1" data-role="STUDENT" data-name="Alice Student" data-email="alice@campus.edu">🎓 Alice (Student • ID: 1)</option>
-              <option value="2" data-role="ADMIN" data-name="Bob Admin" data-email="bob@campus.edu">🛡️ Bob (Admin • ID: 2)</option>
+              <option value="1" data-username="alice_student" data-role="STUDENT" data-name="Alice Student" data-email="alice@campus.edu">🎓 Alice (Student • ID: 1)</option>
+              <option value="2" data-username="bob_admin" data-role="ADMIN" data-name="Bob Admin" data-email="bob@campus.edu">🛡️ Bob (Admin • ID: 2)</option>
             </select>
           </div>
         </div>
@@ -163,7 +163,7 @@
             </svg>
           </div>
           <div class="callout-content">
-            <strong>Automated Waitlist Promotion:</strong> When you cancel an active booking, the system immediately inspects the waitlist for that resource and automatically promotes the next student in queue to <code>PROMOTED</code> status!
+            <strong>Automated Waitlist Promotion:</strong> When an active booking is cancelled, the next student in the queue receives a new <code>PENDING</code> booking for that exact released time slot, and their waitlist entry changes to <code>PROMOTED</code>.
           </div>
         </div>
 
