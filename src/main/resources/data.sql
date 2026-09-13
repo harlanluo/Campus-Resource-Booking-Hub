@@ -6,8 +6,8 @@
 
 -- Users  (2 records)
 INSERT INTO users (username, password, email, role) VALUES
-    ('alice_student', '$2a$10$7QJ8zXmK3nL9pRvWuYtHOe1kG5sDF0qNbCaIwMjEhZlVdPXoTgSyA', 'alice@campus.edu',  'STUDENT'),
-    ('bob_admin',     '$2a$10$7QJ8zXmK3nL9pRvWuYtHOe1kG5sDF0qNbCaIwMjEhZlVdPXoTgSyA', 'bob@campus.edu',    'ADMIN');
+    ('alice_student', '$2a$10$Q3zGnMD5yWq.yoMDZ.bYK.egyMsRGC95lpC62x68FB8u9m2C1CQse', 'alice@campus.edu',  'STUDENT'),
+    ('bob_admin',     '$2a$10$Q3zGnMD5yWq.yoMDZ.bYK.egyMsRGC95lpC62x68FB8u9m2C1CQse', 'bob@campus.edu',    'ADMIN');
 
 -- Resources  (9 records)
 INSERT INTO resources (name, type, description, status, manual_maintenance) VALUES

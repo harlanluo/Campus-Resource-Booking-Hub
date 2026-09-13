@@ -6,8 +6,19 @@ import com.campusbooking.dto.RegisterRequest;
 import com.campusbooking.model.User;
 import com.campusbooking.service.UserService;
 import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +38,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final AuthenticationManager authenticationManager;
+    private final SecurityContextRepository securityContextRepository =
+            new HttpSessionSecurityContextRepository();
 
     /**
      * Registers a new student user.
@@ -58,10 +72,8 @@ public class UserController {
     }
 
     /**
-     * Simulates a user login by verifying credentials against the database.
-     *
-     * <p>No session or token is created at this stage — this is a stateless
-     * credential check only.  JWT integration is planned for Week 3.</p>
+     * Authenticates credentials and stores the resulting identity in the HTTP
+     * session used by later API calls.
      *
      * <ul>
      *   <li>{@code 200 OK}           – credentials valid; returns user details and welcome message</li>
@@ -81,8 +93,22 @@ public class UserController {
      * @return {@code 200 OK} with a {@link LoginResponse} on success
      */
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-        LoginResponse response = userService.login(request);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<LoginResponse> login(
+            @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    UsernamePasswordAuthenticationToken.unauthenticated(
+                            request.getUsername(), request.getPassword()));
+            SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            SecurityContextHolder.setContext(context);
+            securityContextRepository.saveContext(context, httpRequest, httpResponse);
+            return ResponseEntity.ok(userService.login(request));
+        } catch (AuthenticationException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Invalid username or password.");
+        }
     }
 }
