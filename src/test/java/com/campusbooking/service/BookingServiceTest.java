@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
@@ -492,10 +493,15 @@ class BookingServiceTest {
             given(bookingRepository.save(any(Booking.class))).willAnswer(inv -> inv.getArgument(0));
 
             // Arrange – one WAITING waitlist entry exists
+            User waitlistedUser = User.builder()
+                    .id(2L)
+                    .username("next_student")
+                    .role(User.Role.STUDENT)
+                    .build();
             com.campusbooking.model.Waitlist waitlistEntry =
                     com.campusbooking.model.Waitlist.builder()
                             .id(1L)
-                            .user(testUser)
+                            .user(waitlistedUser)
                             .resource(testResource)
                             .requestTime(java.time.LocalDateTime.now().minusHours(1))
                             .status(com.campusbooking.model.Waitlist.Status.WAITING)
@@ -515,6 +521,16 @@ class BookingServiceTest {
             then(waitlistRepository).should(times(1))
                     .save(argThat(w ->
                             w.getStatus() == com.campusbooking.model.Waitlist.Status.PROMOTED));
+
+            ArgumentCaptor<Booking> bookingCaptor = ArgumentCaptor.forClass(Booking.class);
+            then(bookingRepository).should(times(2)).save(bookingCaptor.capture());
+            assertThat(bookingCaptor.getAllValues()).anySatisfy(promotedBooking -> {
+                assertThat(promotedBooking.getUser()).isEqualTo(waitlistedUser);
+                assertThat(promotedBooking.getResource()).isEqualTo(testResource);
+                assertThat(promotedBooking.getStartTime()).isEqualTo(futureStart);
+                assertThat(promotedBooking.getEndTime()).isEqualTo(futureEnd);
+                assertThat(promotedBooking.getStatus()).isEqualTo(Booking.Status.PENDING);
+            });
         }
 
         @Test
