@@ -34,6 +34,14 @@ public class Resource {
     private String description;
 
     /**
+     * Records whether an administrator intentionally placed this resource in
+     * maintenance. Issue resolution must not clear this manual decision.
+     */
+    @Column(name = "manual_maintenance", nullable = false)
+    @Builder.Default
+    private boolean manualMaintenance = false;
+
+    /**
      * Availability status of the resource.
      * Stored as a VARCHAR(20) matching the CHECK constraint in schema.sql.
      */

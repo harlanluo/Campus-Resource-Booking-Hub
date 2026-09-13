@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS resources (
     name        VARCHAR(100) NOT NULL UNIQUE,
     type        VARCHAR(50)  NOT NULL,
     description VARCHAR(500),
+    manual_maintenance BOOLEAN NOT NULL DEFAULT FALSE,
     status      VARCHAR(20)  NOT NULL DEFAULT 'AVAILABLE'
         CHECK (status IN ('AVAILABLE', 'UNAVAILABLE', 'MAINTENANCE'))
 );
@@ -45,6 +46,20 @@ CREATE TABLE IF NOT EXISTS waitlists (
         CHECK (status IN ('WAITING', 'PROMOTED', 'CANCELLED')),
     CONSTRAINT fk_waitlist_user     FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
     CONSTRAINT fk_waitlist_resource FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+);
+
+-- Student-reported resource issues and their maintenance lifecycle
+CREATE TABLE IF NOT EXISTS resource_issues (
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    resource_id   BIGINT       NOT NULL,
+    reporter_id   BIGINT       NOT NULL,
+    description   VARCHAR(500) NOT NULL,
+    status        VARCHAR(20)  NOT NULL DEFAULT 'OPEN'
+        CHECK (status IN ('OPEN', 'RESOLVED')),
+    reported_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_time DATETIME,
+    CONSTRAINT fk_issue_resource FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+    CONSTRAINT fk_issue_reporter FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Junction table for group collaborative bookings (Many-to-Many)

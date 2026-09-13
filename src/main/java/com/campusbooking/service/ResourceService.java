@@ -59,6 +59,7 @@ public class ResourceService {
         if (resource.getStatus() == null) {
             resource.setStatus(Resource.Status.AVAILABLE);
         }
+        resource.setManualMaintenance(resource.getStatus() == Resource.Status.MAINTENANCE);
         return resourceRepository.save(resource);
     }
 
@@ -83,6 +84,7 @@ public class ResourceService {
         existing.setType(updated.getType());
         existing.setDescription(updated.getDescription());
         existing.setStatus(updated.getStatus());
+        existing.setManualMaintenance(updated.getStatus() == Resource.Status.MAINTENANCE);
 
         return resourceRepository.save(existing);
     }
@@ -124,6 +126,7 @@ public class ResourceService {
                         "Resource not found with id: " + id));
 
         existing.setStatus(newStatus);
+        existing.setManualMaintenance(newStatus == Resource.Status.MAINTENANCE);
         return resourceRepository.save(existing);
     }
 }

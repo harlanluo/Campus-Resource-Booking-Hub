@@ -10,16 +10,16 @@ INSERT INTO users (username, password, email, role) VALUES
     ('bob_admin',     '$2a$10$7QJ8zXmK3nL9pRvWuYtHOe1kG5sDF0qNbCaIwMjEhZlVdPXoTgSyA', 'bob@campus.edu',    'ADMIN');
 
 -- Resources  (9 records)
-INSERT INTO resources (name, type, description, status) VALUES
-    ('Study Room A',              'ROOM',      'Quiet study room on Level 2, seats 6.',                                          'AVAILABLE'),
-    ('Computer Lab 101',          'LAB',       'PC lab with 30 workstations and high-speed internet.',                           'AVAILABLE'),
-    ('Projector Unit #3',         'EQUIPMENT', 'Portable HDMI projector with carry case, 4K capable.',                          'MAINTENANCE'),
-    ('DSLR 4K Camera',            'EQUIPMENT', 'Sony Alpha 4K Cinema Camera with 24-70mm f/2.8 zoom lens.',                      'AVAILABLE'),
-    ('Heavy-Duty Tripod',         'EQUIPMENT', 'Fluid-head professional aluminum tripod with quick-release plate.',              'AVAILABLE'),
-    ('Shotgun Mic Kit',           'EQUIPMENT', 'Directional condenser shotgun mic with XLR cable and deadcat wind shield.',      'AVAILABLE'),
-    ('Studio Podcast Mic',        'EQUIPMENT', 'Broadcast dynamic cardioid XLR microphone for pristine studio vocals.',          'AVAILABLE'),
-    ('Audio Interface Mixer',     'EQUIPMENT', '2-channel USB audio interface with +48V phantom power and direct monitoring.',   'AVAILABLE'),
-    ('Studio Monitor Headphones', 'EQUIPMENT', 'Closed-back professional over-ear audio monitoring headphones.',                 'AVAILABLE');
+INSERT INTO resources (name, type, description, status, manual_maintenance) VALUES
+    ('Study Room A',              'ROOM',      'Quiet study room on Level 2, seats 6.',                                          'AVAILABLE',   FALSE),
+    ('Computer Lab 101',          'LAB',       'PC lab with 30 workstations and high-speed internet.',                           'AVAILABLE',   FALSE),
+    ('Projector Unit #3',         'EQUIPMENT', 'Portable HDMI projector with carry case, 4K capable.',                          'MAINTENANCE', TRUE),
+    ('DSLR 4K Camera',            'EQUIPMENT', 'Sony Alpha 4K Cinema Camera with 24-70mm f/2.8 zoom lens.',                      'AVAILABLE',   FALSE),
+    ('Heavy-Duty Tripod',         'EQUIPMENT', 'Fluid-head professional aluminum tripod with quick-release plate.',              'AVAILABLE',   FALSE),
+    ('Shotgun Mic Kit',           'EQUIPMENT', 'Directional condenser shotgun mic with XLR cable and deadcat wind shield.',      'AVAILABLE',   FALSE),
+    ('Studio Podcast Mic',        'EQUIPMENT', 'Broadcast dynamic cardioid XLR microphone for pristine studio vocals.',          'AVAILABLE',   FALSE),
+    ('Audio Interface Mixer',     'EQUIPMENT', '2-channel USB audio interface with +48V phantom power and direct monitoring.',   'AVAILABLE',   FALSE),
+    ('Studio Monitor Headphones', 'EQUIPMENT', 'Closed-back professional over-ear audio monitoring headphones.',                 'AVAILABLE',   FALSE);
 
 -- Bookings  (2 records)
 INSERT INTO bookings (user_id, resource_id, start_time, end_time, status) VALUES
@@ -53,4 +53,3 @@ INSERT INTO kit_items (kit_id, resource_id) VALUES
     (2, 7),
     (2, 8),
     (2, 9);
-
