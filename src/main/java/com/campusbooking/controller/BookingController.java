@@ -2,10 +2,14 @@ package com.campusbooking.controller;
 
 import com.campusbooking.dto.BookingRequestDTO;
 import com.campusbooking.dto.BookingResponseDTO;
+import com.campusbooking.service.BookingReceiptService;
 import com.campusbooking.service.BookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +32,7 @@ import java.util.List;
 public class BookingController {
 
     private final BookingService bookingService;
+    private final BookingReceiptService bookingReceiptService;
 
     /**
      * Creates a new booking for a campus resource.
@@ -89,6 +94,21 @@ public class BookingController {
 
         List<BookingResponseDTO> bookings = bookingService.getUserBookings(userId);
         return ResponseEntity.ok(bookings);
+    }
+
+    /** Downloads a PDF receipt for an approved booking. */
+    @GetMapping(value = "/{bookingId}/receipt", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> downloadReceipt(@PathVariable Long bookingId) {
+        byte[] pdf = bookingReceiptService.generateReceipt(bookingId);
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename("booking-" + bookingId + "-receipt.pdf")
+                .build();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .contentType(MediaType.APPLICATION_PDF)
+                .contentLength(pdf.length)
+                .body(pdf);
     }
 
     /**
