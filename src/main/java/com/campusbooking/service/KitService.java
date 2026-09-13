@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -155,7 +156,11 @@ public class KitService {
         }
 
         // 5. ATOMIC VALIDATION: Check Status & Overlap for EVERY bundled resource
-        for (Resource resource : kit.getResources()) {
+        List<Resource> orderedResources = kit.getResources().stream()
+                .sorted(Comparator.comparing(Resource::getId))
+                .toList();
+
+        for (Resource resource : orderedResources) {
             // (a) Resource status check
             if (resource.getStatus() != Resource.Status.AVAILABLE) {
                 throw new ResponseStatusException(
@@ -178,7 +183,7 @@ public class KitService {
 
         // 6. ATOMIC PERSISTENCE: Create Booking for every item in the kit
         List<Booking> bookingsToSave = new ArrayList<>();
-        for (Resource resource : kit.getResources()) {
+        for (Resource resource : orderedResources) {
             Booking booking = Booking.builder()
                     .user(user)
                     .resource(resource)
