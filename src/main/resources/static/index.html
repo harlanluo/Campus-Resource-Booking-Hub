@@ -257,6 +257,13 @@
               <span class="stat-title">In Maintenance</span>
             </div>
           </div>
+          <div class="admin-stat-card warning">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-info">
+              <span class="stat-number" id="statOpenIssues">0</span>
+              <span class="stat-title">Open Issues</span>
+            </div>
+          </div>
         </div>
 
         <!-- Section 1: Bookings Management & Approvals -->
@@ -322,6 +329,36 @@
                 </tr>
               </thead>
               <tbody id="adminResourcesTbody">
+                <!-- Populated dynamically via app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 3: Reported Resource Issues -->
+        <div class="section-container" style="margin-top: 2.5rem;">
+          <div class="section-title-bar">
+            <h2 class="section-title">
+              <span>⚠️</span>
+              <span>Reported Resource Issues</span>
+            </h2>
+            <span class="count-badge" id="issuesCountBadge">0 Issues</span>
+          </div>
+
+          <div class="table-responsive">
+            <table class="admin-table" id="adminIssuesTable">
+              <thead>
+                <tr>
+                  <th>Issue ID</th>
+                  <th>Resource</th>
+                  <th>Reporter</th>
+                  <th>Description</th>
+                  <th>Reported</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Admin Action</th>
+                </tr>
+              </thead>
+              <tbody id="adminIssuesTbody">
                 <!-- Populated dynamically via app.js -->
               </tbody>
             </table>
@@ -524,6 +561,37 @@
         </button>
         <button type="button" class="btn btn-ghost" id="closeQueueModalBottomBtn">Close</button>
       </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL: REPORT RESOURCE ISSUE -->
+  <div class="modal-backdrop" id="issueModalBackdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalIssueTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon-badge">⚠️</div>
+          <div>
+            <h3 class="modal-title" id="modalIssueTitle">Report Resource Issue</h3>
+            <span class="modal-subtitle" id="modalIssueResourceName">Resource</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeIssueModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <form id="issueForm" class="modal-form">
+        <input type="hidden" id="issueResourceId" />
+        <div class="form-group">
+          <label for="issueDescription">Issue Description <span class="required">*</span></label>
+          <textarea id="issueDescription" rows="4" maxlength="500" required
+                    placeholder="Briefly describe what is broken, unsafe, or not working..."></textarea>
+          <span class="form-help-text">The resource will be placed in maintenance while the issue is open.</span>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="cancelIssueModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-warning-action" id="submitIssueBtn">Submit Issue Report</button>
+        </div>
+      </form>
     </div>
   </div>
 

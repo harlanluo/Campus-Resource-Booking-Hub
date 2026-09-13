@@ -18,6 +18,7 @@ const state = {
   userBookings: [],
   userWaitlists: [],
   adminBookings: [],
+  adminIssues: [],
   activeTab: 'browse',
   filterType: 'ALL',
   filterOnlyAvailable: false,
@@ -26,6 +27,7 @@ const state = {
   selectedResourceForBooking: null,
   selectedKitForBooking: null,
   selectedResourceForQueue: null,
+  selectedResourceForIssue: null,
   selectedGroupMembers: [],
 };
 
@@ -66,12 +68,15 @@ const elements = {
   statApprovedBookings: document.getElementById('statApprovedBookings'),
   statTotalResources: document.getElementById('statTotalResources'),
   statMaintenanceResources: document.getElementById('statMaintenanceResources'),
+  statOpenIssues: document.getElementById('statOpenIssues'),
   adminBookingsTbody: document.getElementById('adminBookingsTbody'),
   adminResourcesTbody: document.getElementById('adminResourcesTbody'),
   countAllAdminBookings: document.getElementById('countAllAdminBookings'),
   countPendingAdminBookings: document.getElementById('countPendingAdminBookings'),
   countApprovedAdminBookings: document.getElementById('countApprovedAdminBookings'),
   openAddResourceModalBtn: document.getElementById('openAddResourceModalBtn'),
+  adminIssuesTbody: document.getElementById('adminIssuesTbody'),
+  issuesCountBadge: document.getElementById('issuesCountBadge'),
 
   // Booking Modal
   bookingModalBackdrop: document.getElementById('bookingModalBackdrop'),
@@ -120,6 +125,16 @@ const elements = {
   resourceQueueList: document.getElementById('resourceQueueList'),
   modalQueueTitle: document.getElementById('modalQueueTitle'),
   modalQueueSubtitle: document.getElementById('modalQueueSubtitle'),
+
+  // Issue Modal
+  issueModalBackdrop: document.getElementById('issueModalBackdrop'),
+  closeIssueModalBtn: document.getElementById('closeIssueModalBtn'),
+  cancelIssueModalBtn: document.getElementById('cancelIssueModalBtn'),
+  issueForm: document.getElementById('issueForm'),
+  issueResourceId: document.getElementById('issueResourceId'),
+  issueDescription: document.getElementById('issueDescription'),
+  modalIssueResourceName: document.getElementById('modalIssueResourceName'),
+  submitIssueBtn: document.getElementById('submitIssueBtn'),
 
   // Toast Container
   toastContainer: document.getElementById('toastContainer'),
@@ -265,6 +280,18 @@ const api = {
     return res.json();
   },
 
+  async downloadReceipt(id) {
+    const res = await fetch(`/api/bookings/${id}/receipt`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Failed to download booking receipt');
+    }
+    return {
+      blob: await res.blob(),
+      filename: getDownloadFilename(res.headers.get('Content-Disposition')) || `booking-${id}-receipt.pdf`
+    };
+  },
+
   // Waitlist
   async joinWaitlist(userId, resourceId) {
     const res = await fetch('/api/waitlists', {
@@ -295,8 +322,43 @@ const api = {
       // Endpoint fallback
     }
     return [];
+  },
+
+  // Resource Issues
+  async getIssues() {
+    const res = await fetch('/api/issues');
+    if (!res.ok) throw new Error('Failed to fetch resource issues');
+    return res.json();
+  },
+
+  async reportIssue(data) {
+    const res = await fetch('/api/issues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Failed to report resource issue');
+    }
+    return res.json();
+  },
+
+  async resolveIssue(id) {
+    const res = await fetch(`/api/issues/${id}/resolve`, { method: 'PUT' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Failed to resolve resource issue');
+    }
+    return res.json();
   }
 };
+
+function getDownloadFilename(contentDisposition) {
+  if (!contentDisposition) return null;
+  const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return match ? match[1] : null;
+}
 
 // ============================================================================
 // Toast Notification Utility
@@ -449,6 +511,7 @@ function handleUserChange() {
   elements.modalUserName.textContent = `${state.currentUser.name} (ID: ${state.currentUser.id})`;
 
   updateRoleBasedVisibility();
+  renderResources();
 
   showToast(
     'User Switched',
@@ -515,8 +578,12 @@ async function loadUserData() {
 
 async function loadAdminData() {
   try {
-    const allBookings = await api.getAllBookings();
+    const [allBookings, allIssues] = await Promise.all([
+      api.getAllBookings(),
+      api.getIssues()
+    ]);
     state.adminBookings = allBookings;
+    state.adminIssues = allIssues;
     renderAdminDashboard();
     updateMetrics();
   } catch (err) {
@@ -633,6 +700,12 @@ function renderResources() {
       `;
     }
 
+    const reportIssueBtnHtml = state.currentUser.role !== 'ADMIN'
+      ? `<button class="btn btn-ghost btn-sm report-issue-btn" data-id="${resource.id}">
+           <span>⚠️ Report Issue</span>
+         </button>`
+      : '';
+
     card.innerHTML = `
       <div>
         <div class="resource-card-header">
@@ -654,6 +727,7 @@ function renderResources() {
 
       <div class="resource-card-actions">
         ${actionBtnHtml}
+        ${reportIssueBtnHtml}
         <button class="btn btn-ghost btn-sm queue-peek-btn" data-id="${resource.id}" title="View current waitlist queue">
           <span>👀 View Queue</span>
         </button>
@@ -669,6 +743,11 @@ function renderResources() {
     const waitlistBtn = card.querySelector('.waitlist-btn');
     if (waitlistBtn) {
       waitlistBtn.addEventListener('click', () => handleDirectJoinWaitlist(resource));
+    }
+
+    const reportIssueBtn = card.querySelector('.report-issue-btn');
+    if (reportIssueBtn) {
+      reportIssueBtn.addEventListener('click', () => openIssueModal(resource));
     }
 
     const queuePeekBtn = card.querySelector('.queue-peek-btn');
@@ -835,6 +914,13 @@ function renderMyBookings() {
       <div class="booking-actions-group">
         <span class="status-pill ${booking.status}">${escapeHtml(booking.status)}</span>
         ${
+          booking.status === 'APPROVED'
+            ? `<button class="btn btn-secondary btn-sm receipt-download-btn" data-id="${booking.bookingId}">
+                 <span>📄 Download Receipt</span>
+               </button>`
+            : ''
+        }
+        ${
           canCancel
             ? `<button class="btn btn-danger btn-sm cancel-booking-btn" data-id="${booking.bookingId}">
                  <span>Cancel Booking</span>
@@ -847,6 +933,11 @@ function renderMyBookings() {
     const cancelBtn = card.querySelector('.cancel-booking-btn');
     if (cancelBtn) {
       cancelBtn.addEventListener('click', () => handleCancelBooking(booking.bookingId, booking.resourceName));
+    }
+
+    const receiptBtn = card.querySelector('.receipt-download-btn');
+    if (receiptBtn) {
+      receiptBtn.addEventListener('click', () => handleReceiptDownload(booking.bookingId));
     }
 
     container.appendChild(card);
@@ -900,11 +991,13 @@ function renderAdminDashboard() {
   const approved = state.adminBookings.filter(
     (b) => b.status === 'APPROVED' || b.status === 'CONFIRMED'
   ).length;
+  const openIssues = state.adminIssues.filter((issue) => issue.status === 'OPEN').length;
 
   elements.statTotalResources.textContent = total;
   elements.statMaintenanceResources.textContent = maintenance;
   elements.statPendingBookings.textContent = pending;
   elements.statApprovedBookings.textContent = approved;
+  elements.statOpenIssues.textContent = openIssues;
 
   elements.countAllAdminBookings.textContent = state.adminBookings.length;
   elements.countPendingAdminBookings.textContent = pending;
@@ -915,6 +1008,9 @@ function renderAdminDashboard() {
 
   // Render Resources Table
   renderAdminResourcesTable();
+
+  // Render Reported Issues Table
+  renderAdminIssuesTable();
 }
 
 function renderAdminBookingsTable() {
@@ -1026,6 +1122,50 @@ function renderAdminResourcesTable() {
       handleDeleteResource(resource.id, resource.name);
     });
 
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAdminIssuesTable() {
+  const tbody = elements.adminIssuesTbody;
+  tbody.innerHTML = '';
+  elements.issuesCountBadge.textContent = `${state.adminIssues.length} Issues`;
+
+  if (state.adminIssues.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; color: var(--slate-500); padding: 2rem;">
+          No resource issues have been reported.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  state.adminIssues.forEach((issue) => {
+    const tr = document.createElement('tr');
+    const isOpen = issue.status === 'OPEN';
+    tr.innerHTML = `
+      <td><strong>#${issue.issueId}</strong></td>
+      <td>
+        <span style="font-weight: 600;">${escapeHtml(issue.resourceName)}</span>
+        <span class="type-badge ${issue.resourceType}" style="font-size: 0.65rem; margin-left: 0.25rem;">${escapeHtml(issue.resourceType)}</span>
+      </td>
+      <td>${escapeHtml(issue.reporterUsername)} <span style="color: var(--slate-400); font-size: 0.75rem;">(ID: ${issue.reporterUserId})</span></td>
+      <td style="max-width: 320px; color: var(--slate-600);">${escapeHtml(issue.description)}</td>
+      <td style="font-size: 0.8rem; color: var(--slate-600);">${formatDateTime(issue.reportedTime)}</td>
+      <td><span class="status-pill ${issue.status}">${escapeHtml(issue.status)}</span></td>
+      <td style="text-align: right;">
+        <button class="btn btn-success btn-sm resolve-issue-btn" data-id="${issue.issueId}"
+                ${!isOpen ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>
+          <span>✅ Resolve</span>
+        </button>
+      </td>
+    `;
+
+    if (isOpen) {
+      tr.querySelector('.resolve-issue-btn').addEventListener('click', () => handleResolveIssue(issue));
+    }
     tbody.appendChild(tr);
   });
 }
@@ -1434,6 +1574,77 @@ async function handleCancelBooking(bookingId, resourceName) {
   }
 }
 
+async function handleReceiptDownload(bookingId) {
+  try {
+    const { blob, filename } = await api.downloadReceipt(bookingId);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast('Receipt Downloaded', `PDF receipt for booking #${bookingId} is ready.`, 'success');
+  } catch (err) {
+    showToast('Receipt Error', err.message, 'error');
+  }
+}
+
+function openIssueModal(resource) {
+  state.selectedResourceForIssue = resource;
+  elements.issueResourceId.value = resource.id;
+  elements.modalIssueResourceName.textContent = `${resource.name} • ${resource.type}`;
+  elements.issueDescription.value = '';
+  elements.issueModalBackdrop.classList.add('open');
+  elements.issueDescription.focus();
+}
+
+function closeIssueModal() {
+  elements.issueModalBackdrop.classList.remove('open');
+  state.selectedResourceForIssue = null;
+}
+
+async function handleIssueSubmit(e) {
+  e.preventDefault();
+  const description = elements.issueDescription.value.trim();
+  if (!description) {
+    showToast('Validation Error', 'Please enter a short issue description.', 'warning');
+    return;
+  }
+
+  const resource = state.selectedResourceForIssue;
+  if (!resource) return;
+
+  try {
+    elements.submitIssueBtn.disabled = true;
+    await api.reportIssue({
+      resourceId: resource.id,
+      reporterUserId: state.currentUser.id,
+      description
+    });
+    closeIssueModal();
+    showToast('Issue Reported', `${resource.name} is now in maintenance.`, 'success');
+    await loadAllData();
+  } catch (err) {
+    showToast('Report Failed', err.message, 'error');
+  } finally {
+    elements.submitIssueBtn.disabled = false;
+  }
+}
+
+async function handleResolveIssue(issue) {
+  if (!confirm(`Resolve issue #${issue.issueId} for ${issue.resourceName}?`)) return;
+
+  try {
+    await api.resolveIssue(issue.issueId);
+    showToast('Issue Resolved', `Issue #${issue.issueId} has been resolved.`, 'success');
+    await loadAllData();
+  } catch (err) {
+    showToast('Resolution Failed', err.message, 'error');
+  }
+}
+
 // Admin Approvals
 async function handleAdminApprove(bookingId) {
   try {
@@ -1666,6 +1877,11 @@ function setupEventListeners() {
   elements.cancelAddResourceModalBtn.addEventListener('click', closeAddResourceModal);
   elements.addResourceForm.addEventListener('submit', handleAddResourceSubmit);
 
+  // Issue Report Modal
+  elements.closeIssueModalBtn.addEventListener('click', closeIssueModal);
+  elements.cancelIssueModalBtn.addEventListener('click', closeIssueModal);
+  elements.issueForm.addEventListener('submit', handleIssueSubmit);
+
   // Queue Modal
   elements.closeQueueModalBtn.addEventListener('click', closeQueueModal);
   elements.closeQueueModalBottomBtn.addEventListener('click', closeQueueModal);
@@ -1681,6 +1897,7 @@ function setupEventListeners() {
     if (e.target === elements.bookingModalBackdrop) closeBookingModal();
     if (e.target === elements.addResourceModalBackdrop) closeAddResourceModal();
     if (e.target === elements.waitlistQueueModalBackdrop) closeQueueModal();
+    if (e.target === elements.issueModalBackdrop) closeIssueModal();
   });
 
   window.addEventListener('keydown', (e) => {
@@ -1688,6 +1905,7 @@ function setupEventListeners() {
       closeBookingModal();
       closeAddResourceModal();
       closeQueueModal();
+      closeIssueModal();
     }
   });
 }

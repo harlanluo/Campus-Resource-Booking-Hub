@@ -720,6 +720,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
   padding-top: 1rem;
   border-top: 1px solid var(--slate-100);
 }
@@ -1026,6 +1027,18 @@ body {
   color: var(--emerald-800);
   border: 1px solid var(--emerald-300);
   font-weight: 800;
+}
+
+.status-pill.OPEN {
+  background: var(--amber-100);
+  color: var(--amber-700);
+  border: 1px solid var(--amber-500);
+}
+
+.status-pill.RESOLVED {
+  background: var(--emerald-100);
+  color: var(--emerald-700);
+  border: 1px solid var(--emerald-500);
 }
 
 /* Waitlist Grid */
@@ -1934,4 +1947,3 @@ textarea:focus {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
-
