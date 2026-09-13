@@ -1,7 +1,11 @@
 package com.campusbooking.repository;
 
 import com.campusbooking.model.Resource;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -23,6 +27,24 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
      * @return an {@link Optional} containing the resource if found
      */
     Optional<Resource> findByName(String name);
+
+    /**
+     * Loads and write-locks one resource for the lifetime of the current
+     * transaction. Booking services use this lock to make the overlap check
+     * and insert one serialized operation per resource.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM Resource r WHERE r.id = :id")
+    Optional<Resource> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * Locks all requested resources in a stable order before a Project Kit is
+     * validated and saved. Stable ordering prevents competing kit requests
+     * from taking the same row locks in different orders.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM Resource r WHERE r.id IN :ids ORDER BY r.id")
+    List<Resource> findAllByIdForUpdate(@Param("ids") List<Long> ids);
 
     /**
      * Returns all resources matching a given type (e.g. "ROOM", "LAB").

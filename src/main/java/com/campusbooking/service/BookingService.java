@@ -25,14 +25,16 @@ import java.util.List;
  * Business logic layer for {@link Booking} operations.
  *
  * <h3>Conflict-prevention strategy</h3>
- * Before persisting any new booking the service executes a JPQL overlap query
+ * Before persisting any new booking the service locks the resource row, then
+ * executes a JPQL overlap query
  * (see {@link com.campusbooking.repository.BookingRepository#findOverlappingBookings})
  * that returns any CONFIRMED, PENDING, or APPROVED booking where:
  * <pre>
  *   existingStart &lt; newEndTime  AND  existingEnd &gt; newStartTime
  * </pre>
  * If the query returns a non-empty list a {@link BookingConflictException} is
- * thrown immediately, preventing dual-booking of the same time slot.
+ * thrown immediately. The row lock keeps this check-and-insert sequence safe
+ * when requests for the same resource arrive concurrently.
  *
  * <h3>Waitlist auto-trigger</h3>
  * When {@link #cancelBooking(Long)} cancels a booking, the service
@@ -82,7 +84,7 @@ public class BookingService {
                         "User not found with id: " + request.getUserId()));
 
         // 2. Resolve resource
-        Resource resource = resourceRepository.findById(request.getResourceId())
+        Resource resource = resourceRepository.findByIdForUpdate(request.getResourceId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Resource not found with id: " + request.getResourceId()));

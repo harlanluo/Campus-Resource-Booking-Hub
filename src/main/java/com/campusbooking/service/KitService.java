@@ -10,6 +10,7 @@ import com.campusbooking.model.Resource;
 import com.campusbooking.model.User;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.KitRepository;
+import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +34,8 @@ import java.util.Set;
  * the service performs an atomic validation and overlap check across ALL bundled resources.
  * If ANY single sub-item is unavailable (in MAINTENANCE or has an overlapping reservation),
  * the transaction is aborted immediately with a 409 Conflict, ensuring that either ALL items
- * are reserved simultaneously or NONE are reserved.
+ * are reserved simultaneously or NONE are reserved. Resources are write-locked in ascending
+ * ID order so competing kit bookings cannot pass validation together.
  */
 @Slf4j
 @Service
@@ -44,6 +46,7 @@ public class KitService {
     private final KitRepository     kitRepository;
     private final UserRepository    userRepository;
     private final BookingRepository bookingRepository;
+    private final ResourceRepository resourceRepository;
 
     // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -159,6 +162,11 @@ public class KitService {
         List<Resource> orderedResources = kit.getResources().stream()
                 .sorted(Comparator.comparing(Resource::getId))
                 .toList();
+
+        List<Long> resourceIds = orderedResources.stream()
+                .map(Resource::getId)
+                .toList();
+        resourceRepository.findAllByIdForUpdate(resourceIds);
 
         for (Resource resource : orderedResources) {
             // (a) Resource status check
