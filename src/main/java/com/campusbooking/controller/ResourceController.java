@@ -5,6 +5,7 @@ import com.campusbooking.service.ResourceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -82,6 +83,7 @@ public class ResourceController {
      * @return {@code 201 Created} with the saved resource (including generated id)
      */
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Resource> createResource(@RequestBody Resource resource) {
         Resource saved = resourceService.createResource(resource);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
@@ -102,6 +104,7 @@ public class ResourceController {
      * @return {@code 200 OK} with the updated resource
      */
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Resource> updateResource(
             @PathVariable Long id,
             @RequestBody Resource updated) {
@@ -124,6 +127,7 @@ public class ResourceController {
      * @return {@code 204 No Content}
      */
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteResource(@PathVariable Long id) {
         resourceService.deleteResource(id);
         return ResponseEntity.noContent().build();
@@ -153,6 +157,7 @@ public class ResourceController {
      * @return {@code 200 OK} with the updated resource
      */
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Resource> patchStatus(
             @PathVariable Long id,
             @RequestBody Map<String, String> body) {

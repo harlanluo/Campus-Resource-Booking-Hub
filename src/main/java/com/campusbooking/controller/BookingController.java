@@ -11,6 +11,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -59,6 +60,7 @@ public class BookingController {
      * @return {@code 201 Created} with the persisted booking details
      */
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN') or @apiAuthorization.isSelf(#request.userId, authentication)")
     public ResponseEntity<BookingResponseDTO> createBooking(
             @Valid @RequestBody BookingRequestDTO request) {
 
@@ -72,6 +74,7 @@ public class BookingController {
      * @return {@code 200 OK} with a list of all {@link BookingResponseDTO}
      */
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<BookingResponseDTO>> getAllBookings() {
         List<BookingResponseDTO> bookings = bookingService.getAllBookings();
         return ResponseEntity.ok(bookings);
@@ -89,6 +92,7 @@ public class BookingController {
      * @return {@code 200 OK} with a list of {@link BookingResponseDTO}
      */
     @GetMapping("/user/{userId}")
+    @PreAuthorize("hasRole('ADMIN') or @apiAuthorization.isSelf(#userId, authentication)")
     public ResponseEntity<List<BookingResponseDTO>> getUserBookings(
             @PathVariable Long userId) {
 
@@ -98,6 +102,7 @@ public class BookingController {
 
     /** Downloads a PDF receipt for an approved booking. */
     @GetMapping(value = "/{bookingId}/receipt", produces = MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize("@apiAuthorization.canAccessBooking(#bookingId, authentication)")
     public ResponseEntity<byte[]> downloadReceipt(@PathVariable Long bookingId) {
         byte[] pdf = bookingReceiptService.generateReceipt(bookingId);
         ContentDisposition disposition = ContentDisposition.attachment()
@@ -126,6 +131,7 @@ public class BookingController {
      * @return {@code 200 OK} with the updated booking reflecting {@code CANCELLED} status
      */
     @PutMapping("/{bookingId}/cancel")
+    @PreAuthorize("@apiAuthorization.canAccessBooking(#bookingId, authentication)")
     public ResponseEntity<BookingResponseDTO> cancelBooking(
             @PathVariable Long bookingId) {
 
@@ -146,6 +152,7 @@ public class BookingController {
      * @return {@code 200 OK} with the updated booking reflecting {@code APPROVED} status
      */
     @PutMapping("/{id}/approve")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BookingResponseDTO> approveBooking(
             @PathVariable Long id) {
 
@@ -166,6 +173,7 @@ public class BookingController {
      * @return {@code 200 OK} with the updated booking reflecting {@code REJECTED} status
      */
     @PutMapping("/{id}/reject")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BookingResponseDTO> rejectBooking(
             @PathVariable Long id) {
 

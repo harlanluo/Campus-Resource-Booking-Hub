@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -66,6 +67,7 @@ public class KitController {
      * @return {@code 201 Created} with the list of created bookings
      */
     @PostMapping("/{kitId}/book")
+    @PreAuthorize("hasRole('ADMIN') or @apiAuthorization.isSelf(#request.userId, authentication)")
     public ResponseEntity<List<BookingResponseDTO>> bookKit(
             @PathVariable Long kitId,
             @Valid @RequestBody KitBookingRequestDTO request) {

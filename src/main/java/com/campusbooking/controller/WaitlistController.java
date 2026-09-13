@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -48,6 +49,7 @@ public class WaitlistController {
      * @return {@code 201 Created} with the persisted waitlist entry details
      */
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN') or @apiAuthorization.isSelf(#request.userId, authentication)")
     public ResponseEntity<WaitlistResponseDTO> joinWaitlist(
             @Valid @RequestBody WaitlistRequestDTO request) {
 
@@ -81,6 +83,7 @@ public class WaitlistController {
      * @return {@code 200 OK} with a list of {@link WaitlistResponseDTO}
      */
     @GetMapping("/user/{userId}")
+    @PreAuthorize("hasRole('ADMIN') or @apiAuthorization.isSelf(#userId, authentication)")
     public ResponseEntity<List<WaitlistResponseDTO>> getWaitlistByUser(
             @PathVariable Long userId) {
 
