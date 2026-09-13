@@ -69,7 +69,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByUserIdAndStatus(Long userId, Booking.Status status);
 
     /**
-     * Finds any CONFIRMED or PENDING bookings that overlap a proposed time window
+     * Finds any CONFIRMED, PENDING, or APPROVED bookings that overlap a proposed time window
      * for the given resource.  Used to detect scheduling conflicts.
      *
      * <p>Overlap condition: {@code existingStart < proposedEnd AND existingEnd > proposedStart}</p>
@@ -83,7 +83,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
            SELECT b FROM Booking b
            WHERE b.resource.id = :resourceId
              AND b.status IN (com.campusbooking.model.Booking.Status.CONFIRMED,
-                              com.campusbooking.model.Booking.Status.PENDING)
+                              com.campusbooking.model.Booking.Status.PENDING,
+                              com.campusbooking.model.Booking.Status.APPROVED)
              AND b.startTime < :endTime
              AND b.endTime   > :startTime
            """)

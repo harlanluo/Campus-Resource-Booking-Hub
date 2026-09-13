@@ -85,7 +85,7 @@ public class KitService {
      *   <li>Time window validation: start must be in the future, end must be after start (400).</li>
      *   <li>Group member resolution (if provided).</li>
      *   <li>Availability check: ALL bundled resources must have status {@code AVAILABLE} (409).</li>
-     *   <li>Overlap check: ALL bundled resources must have NO overlapping CONFIRMED/PENDING bookings (409).</li>
+     *   <li>Overlap check: ALL bundled resources must have NO overlapping CONFIRMED/PENDING/APPROVED bookings (409).</li>
      *   <li>If and only if all pass, reservations for all bundled items are persisted atomically.</li>
      * </ol>
      *

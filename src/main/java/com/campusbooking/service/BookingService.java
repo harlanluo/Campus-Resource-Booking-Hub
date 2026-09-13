@@ -27,7 +27,7 @@ import java.util.List;
  * <h3>Conflict-prevention strategy</h3>
  * Before persisting any new booking the service executes a JPQL overlap query
  * (see {@link com.campusbooking.repository.BookingRepository#findOverlappingBookings})
- * that returns any CONFIRMED or PENDING booking where:
+ * that returns any CONFIRMED, PENDING, or APPROVED booking where:
  * <pre>
  *   existingStart &lt; newEndTime  AND  existingEnd &gt; newStartTime
  * </pre>
@@ -36,9 +36,9 @@ import java.util.List;
  *
  * <h3>Waitlist auto-trigger</h3>
  * When {@link #cancelBooking(Long)} cancels a booking, the service
- * automatically checks the waitlist for that resource.  If any
- * {@code WAITING} entries exist, the earliest one (by {@code request_time})
- * is promoted to {@code PROMOTED} and an auto-notification event is logged.
+ * automatically checks the waitlist for that resource. If any {@code WAITING}
+ * entries exist, the earliest student receives a new PENDING booking for the
+ * exact released time slot and the queue entry becomes {@code PROMOTED}.
  */
 @Slf4j
 @Service
@@ -62,7 +62,7 @@ public class BookingService {
      *   <li>Resource must exist and its status must be {@link Resource.Status#AVAILABLE}.</li>
      *   <li>{@code startTime} must be strictly in the future.</li>
      *   <li>{@code endTime} must be strictly after {@code startTime}.</li>
-     *   <li>No CONFIRMED/PENDING booking may overlap the requested window.</li>
+     *   <li>No CONFIRMED/PENDING/APPROVED booking may overlap the requested window.</li>
      * </ol>
      *
      * @param request the booking payload from the HTTP layer
@@ -209,9 +209,8 @@ public class BookingService {
      *
      * <h4>Waitlist auto-trigger</h4>
      * After cancellation, the service queries the waitlist for the freed resource.
-     * If one or more {@code WAITING} entries exist, the earliest entry
-     * (by {@code request_time}) is promoted to {@code PROMOTED} and an
-     * auto-notification event is logged.
+     * If one or more {@code WAITING} entries exist, the earliest entry receives
+     * a PENDING booking for this exact slot and is marked {@code PROMOTED}.
      *
      * @param bookingId the ID of the booking to cancel
      * @return the updated {@link BookingResponseDTO} reflecting the new status
@@ -236,11 +235,17 @@ public class BookingService {
                     "Completed bookings cannot be cancelled.");
         }
 
+        boolean releasedBlockingSlot = booking.getStatus() == Booking.Status.PENDING
+                || booking.getStatus() == Booking.Status.CONFIRMED
+                || booking.getStatus() == Booking.Status.APPROVED;
+
         booking.setStatus(Booking.Status.CANCELLED);
         Booking updated = bookingRepository.save(booking);
 
         // ── Waitlist auto-trigger ─────────────────────────────────────────────
-        triggerWaitlistPromotion(booking.getResource().getId());
+        if (releasedBlockingSlot) {
+            triggerWaitlistPromotion(booking);
+        }
 
         return BookingResponseDTO.from(updated);
     }
@@ -320,25 +325,35 @@ public class BookingService {
     // ── Private helpers ───────────────────────────────────────────────────────
 
     /**
-     * Checks the waitlist for the given resource and promotes the earliest
-     * {@code WAITING} entry to {@code PROMOTED}, logging an auto-notification event.
+     * Assigns the exact released slot to the earliest waiting student, then
+     * marks that queue entry as promoted.
      *
      * <p>Called automatically after a booking is cancelled, freeing up a slot
      * that a waitlisted user may now claim.</p>
      *
-     * @param resourceId the ID of the resource that just became available
+     * @param releasedBooking the cancelled booking whose slot became available
      */
-    private void triggerWaitlistPromotion(Long resourceId) {
+    private void triggerWaitlistPromotion(Booking releasedBooking) {
+        Long resourceId = releasedBooking.getResource().getId();
         List<Waitlist> queue = waitlistRepository
                 .findByResourceIdAndStatusOrderByRequestTimeAsc(resourceId, Waitlist.Status.WAITING);
 
         if (!queue.isEmpty()) {
             Waitlist next = queue.get(0);
+
+            Booking promotedBooking = Booking.builder()
+                    .user(next.getUser())
+                    .resource(releasedBooking.getResource())
+                    .startTime(releasedBooking.getStartTime())
+                    .endTime(releasedBooking.getEndTime())
+                    .status(Booking.Status.PENDING)
+                    .build();
+            Booking savedPromotion = bookingRepository.save(promotedBooking);
+
             next.setStatus(Waitlist.Status.PROMOTED);
             waitlistRepository.save(next);
-            log.info("[Waitlist Auto-Trigger] User {} promoted for resource {}. " +
-                            "They should be notified to complete their booking.",
-                    next.getUser().getId(), resourceId);
+            log.info("[Waitlist Auto-Trigger] User {} received booking {} for released slot on resource {}.",
+                    next.getUser().getId(), savedPromotion.getId(), resourceId);
         }
     }
 }
