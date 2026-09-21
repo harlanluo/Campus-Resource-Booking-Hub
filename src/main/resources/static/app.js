@@ -16,19 +16,29 @@ const state = {
   resources: [],
   kits: [],
   userBookings: [],
+  userBookingHistory: [],
+  userKitBookings: [],
+  userKitBookingHistory: [],
   userWaitlists: [],
   adminBookings: [],
+  adminKitBookings: [],
   adminIssues: [],
+  adminWaitlistOverview: [],
   activeTab: 'browse',
   filterType: 'ALL',
   filterOnlyAvailable: false,
   searchQuery: '',
-  adminBookingFilter: 'ALL',
+  adminBookingFilter: 'PENDING',
+  bookingView: 'UPCOMING',
   selectedResourceForBooking: null,
   selectedKitForBooking: null,
-  selectedResourceForQueue: null,
   selectedResourceForIssue: null,
   selectedGroupMembers: [],
+  availability: null,
+  availabilityWeekStart: null,
+  selectedScheduleStart: null,
+  selectedScheduleEnd: null,
+  selectedMobileDay: 0,
 };
 
 // ============================================================================
@@ -60,6 +70,11 @@ const elements = {
   myBookingsList: document.getElementById('myBookingsList'),
   myWaitlistList: document.getElementById('myWaitlistList'),
   bookingsCountBadge: document.getElementById('bookingsCountBadge'),
+  bookingViewTabs: document.querySelector('.booking-view-tabs'),
+  bookingViewTitle: document.getElementById('bookingViewTitle'),
+  bookingViewDescription: document.getElementById('bookingViewDescription'),
+  upcomingBookingsCount: document.getElementById('upcomingBookingsCount'),
+  historyBookingsCount: document.getElementById('historyBookingsCount'),
   waitlistCountBadge: document.getElementById('waitlistCountBadge'),
   refreshMyBookingsBtn: document.getElementById('refreshMyBookingsBtn'),
 
@@ -71,12 +86,13 @@ const elements = {
   statOpenIssues: document.getElementById('statOpenIssues'),
   adminBookingsTbody: document.getElementById('adminBookingsTbody'),
   adminResourcesTbody: document.getElementById('adminResourcesTbody'),
-  countAllAdminBookings: document.getElementById('countAllAdminBookings'),
   countPendingAdminBookings: document.getElementById('countPendingAdminBookings'),
   countApprovedAdminBookings: document.getElementById('countApprovedAdminBookings'),
   openAddResourceModalBtn: document.getElementById('openAddResourceModalBtn'),
   adminIssuesTbody: document.getElementById('adminIssuesTbody'),
   issuesCountBadge: document.getElementById('issuesCountBadge'),
+  adminWaitlistTbody: document.getElementById('adminWaitlistTbody'),
+  adminWaitlistCountBadge: document.getElementById('adminWaitlistCountBadge'),
 
   // Booking Modal
   bookingModalBackdrop: document.getElementById('bookingModalBackdrop'),
@@ -98,6 +114,19 @@ const elements = {
   modalResourceIcon: document.getElementById('modalResourceIcon'),
   modalUserName: document.getElementById('modalUserName'),
   modalDurationPreview: document.getElementById('modalDurationPreview'),
+  modalSelectedDate: document.getElementById('modalSelectedDate'),
+  modalSelectedTime: document.getElementById('modalSelectedTime'),
+  selectionValidation: document.getElementById('selectionValidation'),
+  modalResourceDescription: document.getElementById('modalResourceDescription'),
+  modalOperationalStatus: document.getElementById('modalOperationalStatus'),
+  scheduleWeekLabel: document.getElementById('scheduleWeekLabel'),
+  scheduleState: document.getElementById('scheduleState'),
+  scheduleDaysGrid: document.getElementById('scheduleDaysGrid'),
+  mobileDaySelector: document.getElementById('mobileDaySelector'),
+  previousWeekBtn: document.getElementById('previousWeekBtn'),
+  currentWeekBtn: document.getElementById('currentWeekBtn'),
+  nextWeekBtn: document.getElementById('nextWeekBtn'),
+  clearSlotSelectionBtn: document.getElementById('clearSlotSelectionBtn'),
   conflictBanner: document.getElementById('conflictBanner'),
   conflictMessage: document.getElementById('conflictMessage'),
   joinWaitlistFromConflictBtn: document.getElementById('joinWaitlistFromConflictBtn'),
@@ -117,15 +146,6 @@ const elements = {
   newResourceStatus: document.getElementById('newResourceStatus'),
   newResourceDescription: document.getElementById('newResourceDescription'),
 
-  // Queue Modal
-  waitlistQueueModalBackdrop: document.getElementById('waitlistQueueModalBackdrop'),
-  closeQueueModalBtn: document.getElementById('closeQueueModalBtn'),
-  closeQueueModalBottomBtn: document.getElementById('closeQueueModalBottomBtn'),
-  joinWaitlistDirectBtn: document.getElementById('joinWaitlistDirectBtn'),
-  resourceQueueList: document.getElementById('resourceQueueList'),
-  modalQueueTitle: document.getElementById('modalQueueTitle'),
-  modalQueueSubtitle: document.getElementById('modalQueueSubtitle'),
-
   // Issue Modal
   issueModalBackdrop: document.getElementById('issueModalBackdrop'),
   closeIssueModalBtn: document.getElementById('closeIssueModalBtn'),
@@ -141,6 +161,12 @@ const elements = {
   quickStatsFooter: document.getElementById('quickStatsFooter')
 };
 
+async function responseError(response, fallbackMessage) {
+  const body = await response.json().catch(() => ({}));
+  const error = new Error(body.message || body.error || fallbackMessage);
+  error.status = response.status;
+  return error;
+}
 
 // ============================================================================
 // API Service Layer
@@ -183,6 +209,13 @@ const api = {
     return res.json();
   },
 
+  async getResourceAvailability(id, start, end) {
+    const query = new URLSearchParams({ start, end });
+    const res = await fetch(`/api/resources/${id}/availability?${query}`);
+    if (!res.ok) throw new Error(await res.text() || 'Failed to load resource availability');
+    return res.json();
+  },
+
   async deleteResource(id) {
     const res = await fetch(`/api/resources/${id}`, {
       method: 'DELETE'
@@ -194,13 +227,38 @@ const api = {
   // Bookings
   async getUserBookings(userId) {
     const res = await fetch(`/api/bookings/user/${userId}`);
-    if (!res.ok) throw new Error('Failed to fetch user bookings');
+    if (!res.ok) throw await responseError(res, 'Failed to fetch user bookings');
+    return res.json();
+  },
+
+  async getUserBookingHistory(userId) {
+    const res = await fetch(`/api/bookings/user/${userId}/history`);
+    if (!res.ok) throw await responseError(res, 'Failed to fetch booking history');
     return res.json();
   },
 
   async getAllBookings() {
     const res = await fetch('/api/bookings');
-    if (!res.ok) throw new Error('Failed to fetch all bookings');
+    if (!res.ok) throw await responseError(res, 'Failed to fetch all bookings');
+    return res.json();
+  },
+
+  // Product-level Project Kit reservations
+  async getUserKitBookings(userId) {
+    const res = await fetch(`/api/kit-bookings/user/${userId}`);
+    if (!res.ok) throw await responseError(res, 'Failed to fetch Project Kit reservations');
+    return res.json();
+  },
+
+  async getUserKitBookingHistory(userId) {
+    const res = await fetch(`/api/kit-bookings/user/${userId}/history`);
+    if (!res.ok) throw await responseError(res, 'Failed to fetch Project Kit history');
+    return res.json();
+  },
+
+  async getAllKitBookings() {
+    const res = await fetch('/api/kit-bookings');
+    if (!res.ok) throw await responseError(res, 'Failed to fetch Project Kit requests');
     return res.json();
   },
 
@@ -238,6 +296,13 @@ const api = {
     return res.json();
   },
 
+  async getKitAvailability(id, start, end) {
+    const query = new URLSearchParams({ start, end });
+    const res = await fetch(`/api/kits/${id}/availability?${query}`);
+    if (!res.ok) throw new Error(await res.text() || 'Failed to load Project Kit availability');
+    return res.json();
+  },
+
   async bookKit(kitId, data) {
     const res = await fetch(`/api/kits/${kitId}/book`, {
       method: 'POST',
@@ -259,8 +324,7 @@ const api = {
       throw error;
     }
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(err || 'Failed to book project kit');
+      throw await responseError(res, 'Failed to book project kit');
     }
     return res.json();
   },
@@ -270,7 +334,15 @@ const api = {
     const res = await fetch(`/api/bookings/${id}/cancel`, {
       method: 'PUT'
     });
-    if (!res.ok) throw new Error('Failed to cancel booking');
+    if (!res.ok) throw await responseError(res, 'Failed to cancel booking');
+    return res.json();
+  },
+
+  async cancelKitBooking(id) {
+    const res = await fetch(`/api/kit-bookings/${id}/cancel`, {
+      method: 'PUT'
+    });
+    if (!res.ok) throw await responseError(res, 'Failed to cancel Project Kit reservation');
     return res.json();
   },
 
@@ -278,7 +350,7 @@ const api = {
     const res = await fetch(`/api/bookings/${id}/approve`, {
       method: 'PUT'
     });
-    if (!res.ok) throw new Error('Failed to approve booking');
+    if (!res.ok) throw await responseError(res, 'Failed to approve booking');
     return res.json();
   },
 
@@ -286,7 +358,23 @@ const api = {
     const res = await fetch(`/api/bookings/${id}/reject`, {
       method: 'PUT'
     });
-    if (!res.ok) throw new Error('Failed to reject booking');
+    if (!res.ok) throw await responseError(res, 'Failed to reject booking');
+    return res.json();
+  },
+
+  async approveKitBooking(id) {
+    const res = await fetch(`/api/kit-bookings/${id}/approve`, {
+      method: 'PUT'
+    });
+    if (!res.ok) throw await responseError(res, 'Failed to approve Project Kit reservation');
+    return res.json();
+  },
+
+  async rejectKitBooking(id) {
+    const res = await fetch(`/api/kit-bookings/${id}/reject`, {
+      method: 'PUT'
+    });
+    if (!res.ok) throw await responseError(res, 'Failed to reject Project Kit reservation');
     return res.json();
   },
 
@@ -302,36 +390,54 @@ const api = {
     };
   },
 
+  async downloadKitReceipt(id) {
+    const res = await fetch(`/api/kit-bookings/${id}/receipt`);
+    if (!res.ok) throw await responseError(res, 'Failed to download Project Kit receipt');
+    return {
+      blob: await res.blob(),
+      filename: getDownloadFilename(res.headers.get('Content-Disposition')) || `kit-${id}-receipt.pdf`
+    };
+  },
+
   // Waitlist
-  async joinWaitlist(userId, resourceId) {
+  async joinWaitlist(resourceId, startTime, endTime) {
     const res = await fetch('/api/waitlists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, resourceId })
+      body: JSON.stringify({ resourceId, startTime, endTime })
     });
-    if (res.status === 409) {
-      const error = new Error('You are already on the waitlist for this resource.');
-      error.status = 409;
-      throw error;
-    }
-    if (!res.ok) throw new Error('Failed to join waitlist');
+    if (!res.ok) throw await responseError(res, 'Failed to join waitlist');
     return res.json();
   },
 
-  async getResourceWaitlist(resourceId) {
-    const res = await fetch(`/api/waitlists/resource/${resourceId}`);
-    if (!res.ok) throw new Error('Failed to fetch waitlist queue');
+  async getMyWaitlist() {
+    const res = await fetch('/api/waitlists/mine');
+    if (!res.ok) throw await responseError(res, 'Failed to fetch waitlist activity');
     return res.json();
   },
 
-  async getUserWaitlist(userId) {
-    try {
-      const res = await fetch(`/api/waitlists/user/${userId}`);
-      if (res.ok) return await res.json();
-    } catch (e) {
-      // Endpoint fallback
-    }
-    return [];
+  async getAdminWaitlistOverview() {
+    const res = await fetch('/api/waitlists/admin/overview');
+    if (!res.ok) throw await responseError(res, 'Failed to fetch Admin waitlist overview');
+    return res.json();
+  },
+
+  async acceptWaitlistOffer(id) {
+    const res = await fetch(`/api/waitlists/${id}/accept`, { method: 'PUT' });
+    if (!res.ok) throw await responseError(res, 'Failed to accept slot offer');
+    return res.json();
+  },
+
+  async declineWaitlistOffer(id) {
+    const res = await fetch(`/api/waitlists/${id}/decline`, { method: 'PUT' });
+    if (!res.ok) throw await responseError(res, 'Failed to decline slot offer');
+    return res.json();
+  },
+
+  async leaveWaitlist(id) {
+    const res = await fetch(`/api/waitlists/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw await responseError(res, 'Failed to leave waitlist');
+    return res.json();
   },
 
   // Resource Issues
@@ -350,6 +456,24 @@ const api = {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.message || 'Failed to report resource issue');
+    }
+    return res.json();
+  },
+
+  async approveIssue(id) {
+    const res = await fetch(`/api/issues/${id}/approve`, { method: 'PUT' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Failed to approve resource issue');
+    }
+    return res.json();
+  },
+
+  async rejectIssue(id) {
+    const res = await fetch(`/api/issues/${id}/reject`, { method: 'PUT' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Failed to reject resource issue');
     }
     return res.json();
   },
@@ -451,6 +575,58 @@ function formatDuration(startIso, endIso) {
   return `${mins} min`;
 }
 
+function isCurrentDashboardBooking(booking) {
+  return ['PENDING', 'APPROVED', 'CONFIRMED'].includes(booking.status)
+    && new Date(booking.endTime).getTime() > Date.now();
+}
+
+function isCurrentDashboardKit(kitBooking) {
+  return ['PENDING', 'APPROVED'].includes(kitBooking.status)
+    && new Date(kitBooking.endTime).getTime() > Date.now();
+}
+
+function getStudentReservationItems(isHistory) {
+  const bookings = (isHistory ? state.userBookingHistory : state.userBookings)
+    .map((booking) => ({ kind: 'BOOKING', data: booking }));
+  const kitBookings = (isHistory ? state.userKitBookingHistory : state.userKitBookings)
+    .map((kitBooking) => ({ kind: 'KIT', data: kitBooking }));
+
+  return [...bookings, ...kitBookings].sort((a, b) => {
+    const aTime = new Date(a.data.startTime).getTime();
+    const bTime = new Date(b.data.startTime).getTime();
+    return (isHistory ? bTime - aTime : aTime - bTime)
+      || a.kind.localeCompare(b.kind);
+  });
+}
+
+function getAdminReservationItems() {
+  const bookings = state.adminBookings
+    .filter(isCurrentDashboardBooking)
+    .map((booking) => ({ kind: 'BOOKING', data: booking }));
+  const kitBookings = state.adminKitBookings
+    .filter(isCurrentDashboardKit)
+    .map((kitBooking) => ({ kind: 'KIT', data: kitBooking }));
+
+  return [...bookings, ...kitBookings].sort((a, b) =>
+    new Date(a.data.startTime).getTime() - new Date(b.data.startTime).getTime()
+  );
+}
+
+function getBookingDisplayStatus(booking, isHistory = false) {
+  const labels = {
+    PENDING: 'Awaiting approval',
+    APPROVED: 'Confirmed',
+    CONFIRMED: 'Confirmed',
+    COMPLETED: 'Completed',
+    CANCELLED: 'Cancelled',
+    REJECTED: 'Rejected'
+  };
+  if (booking.status === 'PENDING' && isHistory) {
+    return 'Expired request';
+  }
+  return labels[booking.status] || booking.status;
+}
+
 function getLocalIsoString(date) {
   const pad = (n) => String(n).padStart(2, '0');
   const year = date.getFullYear();
@@ -543,7 +719,9 @@ async function handleUserChange(options = {}) {
         await loadAdminData();
       } else {
         state.adminBookings = [];
+        state.adminKitBookings = [];
         state.adminIssues = [];
+        state.adminWaitlistOverview = [];
       }
     }
   } catch (err) {
@@ -592,33 +770,100 @@ async function loadKits() {
 
 
 async function loadUserData() {
-  try {
-    const [bookings, waitlists] = await Promise.all([
-      api.getUserBookings(state.currentUser.id),
-      api.getUserWaitlist(state.currentUser.id)
-    ]);
-    state.userBookings = bookings;
-    state.userWaitlists = waitlists;
+  elements.myBookingsList.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading your reservations...</p></div>';
+  elements.myWaitlistList.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading your waitlist activity...</p></div>';
+  const waitlistPromise = loadMyWaitlists();
+
+  const [upcomingResult, historyResult, kitUpcomingResult, kitHistoryResult] = await Promise.all([
+    api.getUserBookings(state.currentUser.id)
+      .then((data) => ({ ok: true, data }))
+      .catch((error) => ({ ok: false, error })),
+    api.getUserBookingHistory(state.currentUser.id)
+      .then((data) => ({ ok: true, data }))
+      .catch((error) => ({ ok: false, error })),
+    api.getUserKitBookings(state.currentUser.id)
+      .then((data) => ({ ok: true, data }))
+      .catch((error) => ({ ok: false, error })),
+    api.getUserKitBookingHistory(state.currentUser.id)
+      .then((data) => ({ ok: true, data }))
+      .catch((error) => ({ ok: false, error }))
+  ]);
+
+  if (upcomingResult.ok) state.userBookings = upcomingResult.data;
+  if (historyResult.ok) state.userBookingHistory = historyResult.data;
+  if (kitUpcomingResult.ok) state.userKitBookings = kitUpcomingResult.data;
+  if (kitHistoryResult.ok) state.userKitBookingHistory = kitHistoryResult.data;
+  const activeBookingResult = state.bookingView === 'HISTORY' ? historyResult : upcomingResult;
+  const activeKitResult = state.bookingView === 'HISTORY' ? kitHistoryResult : kitUpcomingResult;
+  if (activeBookingResult.ok) {
     renderMyBookings();
-    renderMyWaitlists();
-    updateMetrics();
-  } catch (err) {
+  } else {
+    const err = activeBookingResult.error;
     console.error('Error loading user bookings:', err);
+    elements.myBookingsList.innerHTML = `
+      <div class="empty-state booking-error-state">
+        <p><strong>We could not load your reservations.</strong></p>
+        <p>${escapeHtml(err.message || 'Please try again.')}</p>
+      </div>`;
+  }
+
+  if (!activeKitResult.ok) {
+    console.error('Error loading Project Kit reservations:', activeKitResult.error);
+    showToast('Project Kit Notice', activeKitResult.error.message || 'Project Kit reservations could not be loaded.', 'warning');
+  }
+
+  await waitlistPromise;
+  updateMetrics();
+}
+
+async function loadMyWaitlists() {
+  try {
+    state.userWaitlists = await api.getMyWaitlist();
+    renderMyWaitlists();
+    return true;
+  } catch (err) {
+    console.error('Error loading waitlist activity:', err);
+    elements.myWaitlistList.innerHTML = `
+      <div class="empty-state booking-error-state" style="padding: 1.5rem 1rem;">
+        <p><strong>We could not load your waitlist activity.</strong></p>
+        <p>${escapeHtml(err.message || 'Please try again.')}</p>
+      </div>`;
+    return false;
   }
 }
 
 async function loadAdminData() {
+  const waitlistPromise = loadAdminWaitlistOverview();
   try {
-    const [allBookings, allIssues] = await Promise.all([
+    const [allBookings, allKitBookings, allIssues] = await Promise.all([
       api.getAllBookings(),
+      api.getAllKitBookings(),
       api.getIssues()
     ]);
     state.adminBookings = allBookings;
+    state.adminKitBookings = allKitBookings;
     state.adminIssues = allIssues;
     renderAdminDashboard();
     updateMetrics();
   } catch (err) {
     console.error('Error loading admin bookings:', err);
+  }
+  await waitlistPromise;
+}
+
+async function loadAdminWaitlistOverview() {
+  if (!elements.adminWaitlistTbody) return;
+  elements.adminWaitlistTbody.innerHTML = `
+    <tr><td colspan="5" style="text-align: center; padding: 1.5rem;">Loading waitlist activity...</td></tr>`;
+  try {
+    state.adminWaitlistOverview = await api.getAdminWaitlistOverview();
+    renderAdminWaitlistOverview();
+  } catch (err) {
+    console.error('Error loading Admin waitlist overview:', err);
+    elements.adminWaitlistTbody.innerHTML = `
+      <tr><td colspan="5" style="text-align: center; color: var(--rose-700); padding: 1.5rem;">
+        ${escapeHtml(err.message || 'Unable to load waitlist activity.')}
+      </td></tr>`;
   }
 }
 
@@ -629,12 +874,11 @@ function updateMetrics() {
   elements.metricTotal.textContent = total;
   elements.metricAvailable.textContent = available;
 
-  const myActive = state.userBookings.filter(
-    (b) => b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'APPROVED'
-  ).length;
+  const myActive = state.userBookings.length + state.userKitBookings.length;
   elements.myBookingsCount.textContent = myActive;
 
-  const adminPending = state.adminBookings.filter((b) => b.status === 'PENDING').length;
+  const adminPending = state.adminBookings.filter((b) => b.status === 'PENDING').length
+    + state.adminKitBookings.filter((b) => b.status === 'PENDING').length;
   elements.adminPendingCount.textContent = adminPending;
 
   elements.quickStatsFooter.textContent = `${total} resources loaded • ${adminPending} pending approval`;
@@ -724,11 +968,7 @@ function renderResources() {
         </button>
       `;
     } else {
-      actionBtnHtml = `
-        <button class="btn btn-warning btn-sm waitlist-btn" data-id="${resource.id}">
-          <span>⏳ Join Waitlist</span>
-        </button>
-      `;
+      actionBtnHtml = '<span class="resource-action-note">Unavailable while maintenance is in progress.</span>';
     }
 
     const reportIssueBtnHtml = state.currentUser.role !== 'ADMIN'
@@ -759,9 +999,6 @@ function renderResources() {
       <div class="resource-card-actions">
         ${actionBtnHtml}
         ${reportIssueBtnHtml}
-        <button class="btn btn-ghost btn-sm queue-peek-btn" data-id="${resource.id}" title="View current waitlist queue">
-          <span>👀 View Queue</span>
-        </button>
       </div>
     `;
 
@@ -771,19 +1008,9 @@ function renderResources() {
       bookBtn.addEventListener('click', () => openBookingModal(resource));
     }
 
-    const waitlistBtn = card.querySelector('.waitlist-btn');
-    if (waitlistBtn) {
-      waitlistBtn.addEventListener('click', () => handleDirectJoinWaitlist(resource));
-    }
-
     const reportIssueBtn = card.querySelector('.report-issue-btn');
     if (reportIssueBtn) {
       reportIssueBtn.addEventListener('click', () => openIssueModal(resource));
-    }
-
-    const queuePeekBtn = card.querySelector('.queue-peek-btn');
-    if (queuePeekBtn) {
-      queuePeekBtn.addEventListener('click', () => openQueueModal(resource));
     }
 
     grid.appendChild(card);
@@ -822,7 +1049,7 @@ function renderKitCard(kit) {
           <span class="type-badge KIT">PROJECT KIT</span>
           <span class="status-badge ${allAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}">
             <span class="dot"></span>
-            <span>${allAvailable ? 'ALL AVAILABLE' : 'SOME BUSY'}</span>
+            <span>${allAvailable ? 'CHECK SCHEDULE' : 'ITEM UNAVAILABLE'}</span>
           </span>
         </div>
       </div>
@@ -858,18 +1085,43 @@ function renderKitCard(kit) {
 function renderMyBookings() {
   const container = elements.myBookingsList;
   container.innerHTML = '';
+  const isHistory = state.bookingView === 'HISTORY';
+  const visibleItems = getStudentReservationItems(isHistory);
+  const upcomingCount = state.userBookings.length + state.userKitBookings.length;
+  const historyCount = state.userBookingHistory.length + state.userKitBookingHistory.length;
 
-  elements.bookingsCountBadge.textContent = `${state.userBookings.length} Bookings`;
+  elements.upcomingBookingsCount.textContent = upcomingCount;
+  elements.historyBookingsCount.textContent = historyCount;
+  elements.bookingsCountBadge.textContent = isHistory
+    ? `${historyCount} Historical`
+    : `${upcomingCount} Upcoming`;
+  elements.bookingViewTitle.textContent = isHistory ? 'Booking History' : 'Upcoming Reservations';
+  elements.bookingViewDescription.textContent = isHistory
+    ? 'Completed, cancelled, rejected, and expired reservations are kept here for reference.'
+    : 'Bookings that still need approval or are confirmed for a future time.';
 
-  if (state.userBookings.length === 0) {
+  if (visibleItems.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <p style="font-weight: 600;">No reservations found for ${escapeHtml(state.currentUser.name)}.</p>
-        <p style="font-size: 0.85rem; margin-top: 0.25rem;">Browse available rooms and labs to make your first booking!</p>
+        <p style="font-weight: 600;">${isHistory ? 'You have no booking history yet.' : 'You have no upcoming reservations.'}</p>
+        <p style="font-size: 0.85rem; margin-top: 0.25rem;">${isHistory ? 'Closed reservations will appear here.' : 'Browse available resources to make a booking.'}</p>
       </div>
     `;
     return;
   }
+
+  visibleItems.forEach((item) => {
+    if (item.kind === 'KIT') {
+      container.appendChild(renderKitBookingCard(item.data, isHistory));
+    } else {
+      container.appendChild(renderStandardBookingCard(item.data, isHistory));
+    }
+  });
+}
+
+function renderKitBookingCard(kitBooking, isHistory) {
+  const card = document.createElement('div');
+  card.className = 'booking-item-card kit-booking-card';
 
   const typeIcons = {
     ROOM: '🏢',
@@ -877,52 +1129,144 @@ function renderMyBookings() {
     EQUIPMENT: '📽️'
   };
 
-  state.userBookings.forEach((booking) => {
-    const card = document.createElement('div');
-    card.className = 'booking-item-card';
+  const isOwner = Number(kitBooking.ownerId) === Number(state.currentUser.id);
+  const isGroup = Boolean(kitBooking.groupBooking)
+    || (kitBooking.groupMemberNames && kitBooking.groupMemberNames.length > 0);
+  const canCancel = !isHistory
+    && isOwner
+    && ['PENDING', 'APPROVED'].includes(kitBooking.status)
+    && new Date(kitBooking.startTime).getTime() > Date.now();
+  const canReceipt = ['APPROVED', 'COMPLETED'].includes(kitBooking.status);
+  const displayStatus = getBookingDisplayStatus(kitBooking, isHistory);
+  const resources = Array.isArray(kitBooking.includedResources)
+    ? kitBooking.includedResources
+    : [];
+  const resourceCount = Number(kitBooking.resourceCount) || resources.length;
+  const memberNames = Array.isArray(kitBooking.groupMemberNames)
+    ? kitBooking.groupMemberNames
+    : [];
 
-    const canCancel =
-      booking.status === 'PENDING' ||
-      booking.status === 'CONFIRMED' ||
-      booking.status === 'APPROVED';
+  const memberListHtml = isGroup && memberNames.length > 0
+    ? `
+        <span>•</span>
+        <span><strong>Group members:</strong></span>
+        <div class="co-members-list">
+          ${memberNames.map((name) => `<span class="co-member-pill">👤 ${escapeHtml(name)}</span>`).join('')}
+        </div>
+      `
+    : '';
+  const participationHtml = !isOwner && isGroup
+    ? '<span>•</span><span><strong>Your Role:</strong> Invited co-member</span>'
+    : '';
+  const resourceListHtml = resources.length > 0
+    ? resources.map((resource) => `
+        <li>
+          <span>${typeIcons[resource.type] || '📦'} ${escapeHtml(resource.name)}</span>
+          <span class="type-badge ${escapeHtml(resource.type || 'KIT')}">${escapeHtml(resource.type || 'RESOURCE')}</span>
+        </li>
+      `).join('')
+    : '<li><span>Resource details unavailable</span></li>';
 
-    const duration = formatDuration(booking.startTime, booking.endTime);
-    const isOwner = booking.userId === state.currentUser.id;
-    const isGroup = booking.groupBooking || (booking.groupMemberNames && booking.groupMemberNames.length > 0);
+  card.innerHTML = `
+    <div class="booking-info-group" style="flex: 1;">
+      <div class="booking-resource-icon kit-booking-icon">📦</div>
+      <div class="booking-main-details" style="flex: 1;">
+        <div class="booking-resource-title">
+          <span>${escapeHtml(kitBooking.kitName || 'Project Kit')}</span>
+          <span class="type-badge KIT">PROJECT KIT</span>
+          <span class="group-booking-badge">📦 Kit reservation</span>
+        </div>
+        <div class="kit-booking-reference">${escapeHtml(kitBooking.bookingReference || 'Kit reference pending')}</div>
+        <div class="booking-time-line">
+          <span>🗓️ ${formatDateTime(kitBooking.startTime)} &rarr; ${formatDateTime(kitBooking.endTime)}</span>
+          <span>•</span>
+          <span>⏳ ${formatDuration(kitBooking.startTime, kitBooking.endTime)}</span>
+        </div>
+        <div class="kit-booking-resources">
+          <details>
+            <summary>Included resources (${resourceCount})</summary>
+            <ul class="kit-booking-resource-list">${resourceListHtml}</ul>
+          </details>
+        </div>
+        <div class="co-members-banner">
+          <span><strong>Organizer:</strong> ${isOwner ? 'You (Owner)' : escapeHtml(kitBooking.ownerName || 'Kit owner')}</span>
+          ${memberListHtml}
+          ${participationHtml}
+        </div>
+      </div>
+    </div>
 
-    let groupBadgeHtml = '';
-    let coMembersHtml = '';
+    <div class="booking-actions-group">
+      <span class="status-pill ${escapeHtml(kitBooking.status)}">${escapeHtml(displayStatus)}</span>
+      ${canReceipt
+        ? `<button class="btn btn-secondary btn-sm kit-receipt-download-btn" type="button">
+             <span>📄 Download Kit Receipt</span>
+           </button>`
+        : ''}
+      ${canCancel
+        ? `<button class="btn btn-danger btn-sm cancel-kit-btn" type="button">
+             <span>Cancel Kit</span>
+           </button>`
+        : ''}
+    </div>
+  `;
 
-    if (isGroup) {
-      groupBadgeHtml = `
-        <span class="group-booking-badge" title="Collaborative Group Booking">
-          <span>👥 Group Booking</span>
-        </span>
-      `;
+  card.querySelector('.cancel-kit-btn')?.addEventListener('click', () => handleCancelKitBooking(kitBooking));
+  card.querySelector('.kit-receipt-download-btn')?.addEventListener('click', () => handleKitReceiptDownload(kitBooking));
+  return card;
+}
 
-      if (isOwner && booking.groupMemberNames && booking.groupMemberNames.length > 0) {
-        coMembersHtml = `
-          <div class="co-members-banner">
-            <span><strong>Organizer:</strong> You (Owner)</span>
-            <span>•</span>
-            <span><strong>Co-Members:</strong></span>
-            <div class="co-members-list">
-              ${booking.groupMemberNames.map((name) => `<span class="co-member-pill">👤 ${escapeHtml(name)}</span>`).join('')}
-            </div>
-          </div>
-        `;
-      } else if (!isOwner) {
-        coMembersHtml = `
-          <div class="co-members-banner">
-            <span><strong>Organizer:</strong> ${escapeHtml(booking.username)}</span>
-            <span>•</span>
-            <span><strong>Status:</strong> You are an invited co-member</span>
-          </div>
-        `;
-      }
-    }
+function renderStandardBookingCard(booking, isHistory) {
+  const card = document.createElement('div');
+  card.className = 'booking-item-card';
 
-    card.innerHTML = `
+  const typeIcons = {
+    ROOM: '🏢',
+    LAB: '💻',
+    EQUIPMENT: '📽️'
+  };
+
+  const canCancel = !isHistory
+    && ['PENDING', 'CONFIRMED', 'APPROVED'].includes(booking.status)
+    && new Date(booking.startTime).getTime() > Date.now();
+
+  const duration = formatDuration(booking.startTime, booking.endTime);
+  const isOwner = booking.userId === state.currentUser.id;
+  const isGroup = booking.groupBooking || (booking.groupMemberNames && booking.groupMemberNames.length > 0);
+  const displayStatus = getBookingDisplayStatus(booking, isHistory);
+
+  let groupBadgeHtml = '';
+  let coMembersHtml = '';
+
+  if (isGroup) {
+    groupBadgeHtml = `
+      <span class="group-booking-badge" title="Collaborative Group Booking">
+        <span>👥 Group Booking</span>
+      </span>
+    `;
+  }
+
+  const memberListHtml = isGroup && booking.groupMemberNames && booking.groupMemberNames.length > 0
+    ? `
+        <span>•</span>
+        <span><strong>Co-Members:</strong></span>
+        <div class="co-members-list">
+          ${booking.groupMemberNames.map((name) => `<span class="co-member-pill">👤 ${escapeHtml(name)}</span>`).join('')}
+        </div>
+      `
+    : '';
+  const participationHtml = !isOwner && isGroup
+    ? '<span>•</span><span><strong>Your Role:</strong> Invited co-member</span>'
+    : '';
+  coMembersHtml = `
+    <div class="co-members-banner">
+      <span><strong>Organizer:</strong> ${isOwner ? 'You (Owner)' : escapeHtml(booking.username)}</span>
+      ${memberListHtml}
+      ${participationHtml}
+    </div>
+  `;
+
+  card.innerHTML = `
       <div class="booking-info-group" style="flex: 1;">
         <div class="booking-resource-icon">
           ${typeIcons[booking.resourceType] || '📦'}
@@ -943,9 +1287,9 @@ function renderMyBookings() {
       </div>
 
       <div class="booking-actions-group">
-        <span class="status-pill ${booking.status}">${escapeHtml(booking.status)}</span>
+        <span class="status-pill ${booking.status}">${escapeHtml(displayStatus)}</span>
         ${
-          booking.status === 'APPROVED'
+          !isHistory && (booking.status === 'APPROVED' || booking.status === 'CONFIRMED')
             ? `<button class="btn btn-secondary btn-sm receipt-download-btn" data-id="${booking.bookingId}">
                  <span>📄 Download Receipt</span>
                </button>`
@@ -970,22 +1314,19 @@ function renderMyBookings() {
     if (receiptBtn) {
       receiptBtn.addEventListener('click', () => handleReceiptDownload(booking.bookingId));
     }
-
-    container.appendChild(card);
-  });
-
+  return card;
 }
 
 function renderMyWaitlists() {
   const container = elements.myWaitlistList;
   container.innerHTML = '';
 
-  elements.waitlistCountBadge.textContent = `${state.userWaitlists.length} Waitlisted`;
+  elements.waitlistCountBadge.textContent = `${state.userWaitlists.length} Active`;
 
   if (state.userWaitlists.length === 0) {
     container.innerHTML = `
       <div class="empty-state" style="padding: 1.5rem 1rem;">
-        <p style="color: var(--slate-500); font-size: 0.875rem;">You are not currently in any waitlist queues.</p>
+        <p style="color: var(--slate-500); font-size: 0.875rem;">You have no active waitlist requests or slot offers.</p>
       </div>
     `;
     return;
@@ -993,22 +1334,66 @@ function renderMyWaitlists() {
 
   state.userWaitlists.forEach((item) => {
     const card = document.createElement('div');
-    card.className = 'waitlist-card';
+    const offered = item.status === 'OFFERED';
+    card.className = `waitlist-card${offered ? ' offer-card' : ''}`;
+    const queueDetail = offered
+      ? `Respond by ${formatDateTime(item.offerExpiresAt)}`
+      : `Queue position #${item.queuePosition}`;
+    const actions = offered
+      ? `<div class="waitlist-actions">
+           <button type="button" class="btn btn-primary btn-sm accept-slot-btn">Accept Slot</button>
+           <button type="button" class="btn btn-secondary btn-sm decline-slot-btn">Decline</button>
+         </div>`
+      : `<button type="button" class="btn btn-ghost btn-sm leave-waitlist-btn">Leave waitlist</button>`;
 
     card.innerHTML = `
-      <div>
-        <strong style="color: var(--slate-900); font-size: 0.95rem;">${escapeHtml(item.resourceName)}</strong>
-        <div style="font-size: 0.75rem; color: var(--slate-500); margin-top: 0.2rem;">
-          Requested: ${formatDateTime(item.requestTime)}
-        </div>
+      <div class="waitlist-card-copy">
+        <strong>${escapeHtml(item.displayStatus)}</strong>
+        <span class="waitlist-resource-name">${escapeHtml(item.resourceName)}</span>
+        <span>${formatDateTime(item.requestedStart)} → ${formatDateTime(item.requestedEnd)}</span>
+        <span>${escapeHtml(queueDetail)}</span>
       </div>
-      <div>
-        <span class="status-pill ${item.status}">${escapeHtml(item.status)}</span>
-      </div>
+      ${actions}
     `;
+
+    card.querySelector('.accept-slot-btn')?.addEventListener('click', () => handleAcceptSlot(item));
+    card.querySelector('.decline-slot-btn')?.addEventListener('click', () => handleDeclineSlot(item));
+    card.querySelector('.leave-waitlist-btn')?.addEventListener('click', () => handleLeaveWaitlist(item));
 
     container.appendChild(card);
   });
+}
+
+async function handleAcceptSlot(item) {
+  try {
+    await api.acceptWaitlistOffer(item.id);
+    showToast('Slot accepted', 'Your booking request is now awaiting approval.', 'success');
+    await loadAllData();
+  } catch (err) {
+    showToast('Unable to accept', err.message, err.status === 409 ? 'warning' : 'error');
+    await loadUserData();
+  }
+}
+
+async function handleDeclineSlot(item) {
+  try {
+    await api.declineWaitlistOffer(item.id);
+    showToast('Offer declined', 'The slot was released to the next eligible student.', 'info');
+    await loadAllData();
+  } catch (err) {
+    showToast('Unable to decline', err.message, err.status === 409 ? 'warning' : 'error');
+    await loadUserData();
+  }
+}
+
+async function handleLeaveWaitlist(item) {
+  try {
+    await api.leaveWaitlist(item.id);
+    showToast('Waitlist left', 'Your request no longer counts in this queue.', 'info');
+    await loadAllData();
+  } catch (err) {
+    showToast('Unable to leave', err.message, err.status === 409 ? 'warning' : 'error');
+  }
 }
 
 // ============================================================================
@@ -1018,11 +1403,14 @@ function renderAdminDashboard() {
   // Stats
   const total = state.resources.length;
   const maintenance = state.resources.filter((r) => r.status === 'MAINTENANCE').length;
-  const pending = state.adminBookings.filter((b) => b.status === 'PENDING').length;
-  const approved = state.adminBookings.filter(
-    (b) => b.status === 'APPROVED' || b.status === 'CONFIRMED'
+  const adminItems = getAdminReservationItems();
+  const pending = adminItems.filter((item) => item.data.status === 'PENDING').length;
+  const approved = adminItems.filter(
+    (item) => item.data.status === 'APPROVED' || item.data.status === 'CONFIRMED'
   ).length;
-  const openIssues = state.adminIssues.filter((issue) => issue.status === 'OPEN').length;
+  const openIssues = state.adminIssues.filter(
+    (issue) => issue.status === 'PENDING' || issue.status === 'OPEN'
+  ).length;
 
   elements.statTotalResources.textContent = total;
   elements.statMaintenanceResources.textContent = maintenance;
@@ -1030,7 +1418,6 @@ function renderAdminDashboard() {
   elements.statApprovedBookings.textContent = approved;
   elements.statOpenIssues.textContent = openIssues;
 
-  elements.countAllAdminBookings.textContent = state.adminBookings.length;
   elements.countPendingAdminBookings.textContent = pending;
   elements.countApprovedAdminBookings.textContent = approved;
 
@@ -1044,32 +1431,70 @@ function renderAdminDashboard() {
   renderAdminIssuesTable();
 }
 
+function renderAdminWaitlistOverview() {
+  const tbody = elements.adminWaitlistTbody;
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  elements.adminWaitlistCountBadge.textContent = `${state.adminWaitlistOverview.length} Active Slots`;
+
+  if (state.adminWaitlistOverview.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="5" style="text-align: center; color: var(--slate-500); padding: 2rem;">
+        No active waitlist queues or slot offers.
+      </td></tr>`;
+    return;
+  }
+
+  state.adminWaitlistOverview.forEach((slot) => {
+    const tr = document.createElement('tr');
+    const offerText = slot.activeOffer
+      ? '<span class="status-pill OFFERED">Active offer</span>'
+      : '<span style="color: var(--slate-500); font-weight: 600;">No active offer</span>';
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(slot.resourceName)}</strong></td>
+      <td>${formatDateTime(slot.requestedStart)} &rarr; ${formatDateTime(slot.requestedEnd)}</td>
+      <td>${slot.waitingCount}</td>
+      <td>${offerText}</td>
+      <td>${slot.activeOffer ? formatDateTime(slot.offerExpiresAt) : '—'}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
 function renderAdminBookingsTable() {
   const tbody = elements.adminBookingsTbody;
   tbody.innerHTML = '';
 
-  let filtered = state.adminBookings;
+  let filtered = getAdminReservationItems();
   if (state.adminBookingFilter === 'PENDING') {
-    filtered = filtered.filter((b) => b.status === 'PENDING');
-  } else if (state.adminBookingFilter === 'APPROVED') {
-    filtered = filtered.filter((b) => b.status === 'APPROVED' || b.status === 'CONFIRMED');
+    filtered = filtered.filter((item) => item.data.status === 'PENDING');
+  } else {
+    filtered = filtered.filter((item) => item.data.status === 'APPROVED' || item.data.status === 'CONFIRMED');
   }
 
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="6" style="text-align: center; color: var(--slate-500); padding: 2rem;">
-          No bookings found matching filter "${state.adminBookingFilter}".
+          ${state.adminBookingFilter === 'PENDING'
+            ? 'No bookings are awaiting a decision.'
+            : 'No confirmed upcoming bookings.'}
         </td>
       </tr>
     `;
     return;
   }
 
-  filtered.forEach((booking) => {
+  filtered.forEach((item) => {
+    if (item.kind === 'KIT') {
+      renderAdminKitBookingRow(tbody, item.data);
+      return;
+    }
+
+    const booking = item.data;
     const tr = document.createElement('tr');
 
     const isPending = booking.status === 'PENDING';
+    const displayStatus = getBookingDisplayStatus(booking);
 
     tr.innerHTML = `
       <td><strong>#${booking.bookingId}</strong></td>
@@ -1085,17 +1510,15 @@ function renderAdminBookingsTable() {
         ${formatDateTime(booking.startTime)} &rarr; ${formatDateTime(booking.endTime)}
       </td>
       <td>
-        <span class="status-pill ${booking.status}">${escapeHtml(booking.status)}</span>
+        <span class="status-pill ${booking.status}">${escapeHtml(displayStatus)}</span>
       </td>
       <td style="text-align: right;">
-        <div style="display: inline-flex; gap: 0.4rem;">
-          <button class="btn btn-success btn-sm admin-approve-btn" data-id="${booking.bookingId}" ${!isPending ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>
-            <span>✅ Approve</span>
-          </button>
-          <button class="btn btn-danger btn-sm admin-reject-btn" data-id="${booking.bookingId}" ${!isPending ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>
-            <span>❌ Reject</span>
-          </button>
-        </div>
+        ${isPending
+          ? `<div style="display: inline-flex; gap: 0.4rem;">
+               <button class="btn btn-success btn-sm admin-approve-btn" data-id="${booking.bookingId}"><span>✅ Approve</span></button>
+               <button class="btn btn-danger btn-sm admin-reject-btn" data-id="${booking.bookingId}"><span>❌ Reject</span></button>
+             </div>`
+          : '<span style="color: var(--slate-500); font-size: 0.8rem; font-weight: 600;">Decision complete</span>'}
       </td>
     `;
 
@@ -1110,6 +1533,66 @@ function renderAdminBookingsTable() {
 
     tbody.appendChild(tr);
   });
+}
+
+function renderAdminKitBookingRow(tbody, kitBooking) {
+  const tr = document.createElement('tr');
+  const isPending = kitBooking.status === 'PENDING';
+  const resources = Array.isArray(kitBooking.includedResources)
+    ? kitBooking.includedResources
+    : [];
+  const resourceCount = Number(kitBooking.resourceCount) || resources.length;
+  const resourceListHtml = resources.length > 0
+    ? resources.map((resource) => `<li>${escapeHtml(resource.name)} <span class="type-badge ${escapeHtml(resource.type || 'KIT')}">${escapeHtml(resource.type || 'RESOURCE')}</span></li>`).join('')
+    : '<li>Resource details unavailable</li>';
+  const members = Array.isArray(kitBooking.groupMemberNames) ? kitBooking.groupMemberNames : [];
+  const groupHtml = members.length > 0
+    ? `<div class="admin-kit-members">👥 ${members.map((name) => escapeHtml(name)).join(', ')}</div>`
+    : '';
+
+  tr.className = 'admin-kit-row';
+  tr.innerHTML = `
+    <td>
+      <strong class="kit-booking-reference">${escapeHtml(kitBooking.bookingReference || `Kit #${kitBooking.id}`)}</strong>
+      <span class="type-badge KIT admin-record-badge">PROJECT KIT</span>
+    </td>
+    <td>
+      <span style="font-weight: 600;">${escapeHtml(kitBooking.ownerName || 'Unknown owner')}</span>
+      <span style="color: var(--slate-400); font-size: 0.75rem;">(ID: ${kitBooking.ownerId})</span>
+      ${groupHtml}
+    </td>
+    <td>
+      <strong>${escapeHtml(kitBooking.kitName || 'Project Kit')}</strong>
+      <details class="admin-kit-resources">
+        <summary>${resourceCount} included resource${resourceCount === 1 ? '' : 's'}</summary>
+        <ul>${resourceListHtml}</ul>
+      </details>
+    </td>
+    <td style="font-size: 0.8rem; color: var(--slate-600);">
+      ${formatDateTime(kitBooking.startTime)} &rarr; ${formatDateTime(kitBooking.endTime)}
+    </td>
+    <td>
+      <span class="status-pill ${escapeHtml(kitBooking.status)}">${escapeHtml(getBookingDisplayStatus(kitBooking))}</span>
+    </td>
+    <td style="text-align: right;">
+      ${isPending
+        ? `<div style="display: inline-flex; gap: 0.4rem;">
+             <button class="btn btn-success btn-sm admin-kit-approve-btn" type="button"><span>✅ Approve Kit</span></button>
+             <button class="btn btn-danger btn-sm admin-kit-reject-btn" type="button"><span>❌ Reject Kit</span></button>
+           </div>`
+        : '<span style="color: var(--slate-500); font-size: 0.8rem; font-weight: 600;">Decision complete</span>'}
+    </td>
+  `;
+
+  if (isPending) {
+    tr.querySelector('.admin-kit-approve-btn').addEventListener('click', () =>
+      handleAdminApproveKit(kitBooking)
+    );
+    tr.querySelector('.admin-kit-reject-btn').addEventListener('click', () =>
+      handleAdminRejectKit(kitBooking)
+    );
+  }
+  tbody.appendChild(tr);
 }
 
 function renderAdminResourcesTable() {
@@ -1160,7 +1643,9 @@ function renderAdminResourcesTable() {
 function renderAdminIssuesTable() {
   const tbody = elements.adminIssuesTbody;
   tbody.innerHTML = '';
-  elements.issuesCountBadge.textContent = `${state.adminIssues.length} Issues`;
+  const pendingCount = state.adminIssues.filter((issue) => issue.status === 'PENDING').length;
+  const openCount = state.adminIssues.filter((issue) => issue.status === 'OPEN').length;
+  elements.issuesCountBadge.textContent = `${pendingCount} Pending • ${openCount} Open`;
 
   if (state.adminIssues.length === 0) {
     tbody.innerHTML = `
@@ -1175,7 +1660,16 @@ function renderAdminIssuesTable() {
 
   state.adminIssues.forEach((issue) => {
     const tr = document.createElement('tr');
+    const isPending = issue.status === 'PENDING';
     const isOpen = issue.status === 'OPEN';
+    const actionHtml = isPending
+      ? `<div style="display: inline-flex; gap: 0.4rem;">
+           <button class="btn btn-success btn-sm approve-issue-btn" data-id="${issue.issueId}"><span>✅ Approve</span></button>
+           <button class="btn btn-danger btn-sm reject-issue-btn" data-id="${issue.issueId}"><span>❌ Reject</span></button>
+         </div>`
+      : isOpen
+        ? `<button class="btn btn-success btn-sm resolve-issue-btn" data-id="${issue.issueId}"><span>✅ Resolve</span></button>`
+        : '<span style="color: var(--slate-500); font-size: 0.8rem; font-weight: 600;">Closed</span>';
     tr.innerHTML = `
       <td><strong>#${issue.issueId}</strong></td>
       <td>
@@ -1187,13 +1681,14 @@ function renderAdminIssuesTable() {
       <td style="font-size: 0.8rem; color: var(--slate-600);">${formatDateTime(issue.reportedTime)}</td>
       <td><span class="status-pill ${issue.status}">${escapeHtml(issue.status)}</span></td>
       <td style="text-align: right;">
-        <button class="btn btn-success btn-sm resolve-issue-btn" data-id="${issue.issueId}"
-                ${!isOpen ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>
-          <span>✅ Resolve</span>
-        </button>
+        ${actionHtml}
       </td>
     `;
 
+    if (isPending) {
+      tr.querySelector('.approve-issue-btn').addEventListener('click', () => handleApproveIssue(issue));
+      tr.querySelector('.reject-issue-btn').addEventListener('click', () => handleRejectIssue(issue));
+    }
     if (isOpen) {
       tr.querySelector('.resolve-issue-btn').addEventListener('click', () => handleResolveIssue(issue));
     }
@@ -1205,8 +1700,8 @@ function renderAdminIssuesTable() {
 // Actions & Handlers
 // ============================================================================
 
-// Booking Modal Open & Presets
-function openBookingModal(resource) {
+// Availability-first Booking Modal
+async function openBookingModal(resource) {
   state.selectedResourceForBooking = resource;
   state.selectedKitForBooking = null;
   state.selectedGroupMembers = [];
@@ -1218,6 +1713,8 @@ function openBookingModal(resource) {
   elements.modalBookingTitle.textContent = `Reserve ${resource.name}`;
   elements.modalResourceSubtitle.textContent = `${resource.name} • ${resource.type}`;
   elements.modalUserName.textContent = `${state.currentUser.name} (ID: ${state.currentUser.id})`;
+  elements.modalResourceDescription.textContent = resource.description || 'No detailed specifications provided.';
+  setOperationalStatus(resource.status);
 
   const typeIcons = { ROOM: '🏢', LAB: '💻', EQUIPMENT: '📽️' };
   elements.modalResourceIcon.textContent = typeIcons[resource.type] || '🏛️';
@@ -1232,33 +1729,12 @@ function openBookingModal(resource) {
   // Hide conflict banner from any previous attempt
   elements.conflictBanner.style.display = 'none';
 
-  // Set min constraint to current local time
-  const now = new Date();
-  const minNowIso = getLocalIsoString(now);
-  elements.bookingStartTime.min = minNowIso;
-
-  // Default times: Tomorrow 09:00 to 11:00
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(9, 0, 0, 0);
-
-  const tomorrowEnd = new Date(tomorrow);
-  tomorrowEnd.setHours(11, 0, 0, 0);
-
-  const startVal = getLocalIsoString(tomorrow);
-  const endVal = getLocalIsoString(tomorrowEnd);
-
-  elements.bookingStartTime.value = startVal;
-  elements.bookingEndTime.min = startVal;
-  elements.bookingEndTime.value = endVal;
-
-  updateDurationPreview();
-
+  initialiseScheduleSelection();
   elements.bookingModalBackdrop.classList.add('open');
-  elements.bookingStartTime.focus();
+  await loadAvailability();
 }
 
-function openKitBookingModal(kit) {
+async function openKitBookingModal(kit) {
   state.selectedKitForBooking = kit;
   state.selectedResourceForBooking = null;
   state.selectedGroupMembers = [];
@@ -1271,6 +1747,9 @@ function openKitBookingModal(kit) {
   elements.modalResourceSubtitle.textContent = `Project Kit Bundle • ${kit.itemCount} Items`;
   elements.modalResourceIcon.textContent = '📦';
   elements.modalUserName.textContent = `${state.currentUser.name} (ID: ${state.currentUser.id})`;
+  elements.modalResourceDescription.textContent = kit.description || 'Pre-configured project equipment bundle.';
+  const allOperational = kit.items && kit.items.every((item) => item.status === 'AVAILABLE');
+  setOperationalStatus(allOperational ? 'AVAILABLE' : 'UNAVAILABLE');
 
   // Display bundled items list in modal
   elements.kitItemsPreview.style.display = 'block';
@@ -1294,30 +1773,9 @@ function openKitBookingModal(kit) {
   // Hide conflict banner from any previous attempt
   elements.conflictBanner.style.display = 'none';
 
-  // Set min constraint to current local time
-  const now = new Date();
-  const minNowIso = getLocalIsoString(now);
-  elements.bookingStartTime.min = minNowIso;
-
-  // Default times: Tomorrow 09:00 to 11:00
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(9, 0, 0, 0);
-
-  const tomorrowEnd = new Date(tomorrow);
-  tomorrowEnd.setHours(11, 0, 0, 0);
-
-  const startVal = getLocalIsoString(tomorrow);
-  const endVal = getLocalIsoString(tomorrowEnd);
-
-  elements.bookingStartTime.value = startVal;
-  elements.bookingEndTime.min = startVal;
-  elements.bookingEndTime.value = endVal;
-
-  updateDurationPreview();
-
+  initialiseScheduleSelection();
   elements.bookingModalBackdrop.classList.add('open');
-  elements.bookingStartTime.focus();
+  await loadAvailability();
 }
 
 function closeBookingModal() {
@@ -1325,6 +1783,218 @@ function closeBookingModal() {
   state.selectedResourceForBooking = null;
   state.selectedKitForBooking = null;
   state.selectedGroupMembers = [];
+  state.availability = null;
+  state.selectedScheduleStart = null;
+  state.selectedScheduleEnd = null;
+}
+
+function setOperationalStatus(status) {
+  const available = status === 'AVAILABLE';
+  elements.modalOperationalStatus.className = `status-badge ${available ? 'AVAILABLE' : status}`;
+  elements.modalOperationalStatus.innerHTML = `
+    <span class="dot"></span>
+    <span>${available ? 'Operational' : status === 'MAINTENANCE' ? 'Maintenance' : 'Unavailable'}</span>
+  `;
+}
+
+function initialiseScheduleSelection() {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  state.availabilityWeekStart = startOfWeek(tomorrow);
+  state.selectedMobileDay = dayIndexFromMonday(tomorrow);
+  state.availability = null;
+  clearScheduleSelection(false);
+  elements.bookingStartTime.min = getLocalIsoString(now);
+  elements.scheduleDaysGrid.innerHTML = '';
+  elements.scheduleState.className = 'schedule-state';
+  elements.scheduleState.textContent = 'Loading availability…';
+}
+
+function startOfWeek(date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  const mondayOffset = (result.getDay() + 6) % 7;
+  result.setDate(result.getDate() - mondayOffset);
+  return result;
+}
+
+function dayIndexFromMonday(date) {
+  return (date.getDay() + 6) % 7;
+}
+
+async function loadAvailability() {
+  if (!state.availabilityWeekStart) return;
+  const weekStart = new Date(state.availabilityWeekStart);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const queryStart = getLocalIsoString(weekStart);
+  const queryEnd = getLocalIsoString(weekEnd);
+
+  elements.scheduleState.className = 'schedule-state';
+  elements.scheduleState.textContent = 'Loading availability…';
+  elements.scheduleDaysGrid.innerHTML = '';
+  elements.mobileDaySelector.innerHTML = '';
+  updateWeekLabel(weekStart, weekEnd);
+
+  try {
+    state.availability = state.selectedKitForBooking
+      ? await api.getKitAvailability(state.selectedKitForBooking.id, queryStart, queryEnd)
+      : await api.getResourceAvailability(state.selectedResourceForBooking.id, queryStart, queryEnd);
+    elements.scheduleState.className = 'schedule-state ready';
+    elements.scheduleState.textContent = '';
+    renderAvailabilitySchedule();
+  } catch (err) {
+    state.availability = null;
+    elements.scheduleState.className = 'schedule-state';
+    elements.scheduleState.textContent = `Unable to load availability. ${err.message}`;
+  }
+}
+
+function updateWeekLabel(weekStart, weekEnd) {
+  const lastDay = new Date(weekEnd);
+  lastDay.setDate(lastDay.getDate() - 1);
+  const options = { day: 'numeric', month: 'short' };
+  elements.scheduleWeekLabel.textContent = `${weekStart.toLocaleDateString('en-NZ', options)} – ${lastDay.toLocaleDateString('en-NZ', { ...options, year: 'numeric' })}`;
+}
+
+function renderAvailabilitySchedule() {
+  const availability = state.availability;
+  if (!availability) return;
+
+  elements.scheduleDaysGrid.innerHTML = '';
+  elements.mobileDaySelector.innerHTML = '';
+  const slotsByDate = new Map();
+  availability.slots.forEach((slot) => {
+    const key = slot.startTime.slice(0, 10);
+    if (!slotsByDate.has(key)) slotsByDate.set(key, []);
+    slotsByDate.get(key).push(slot);
+  });
+
+  for (let index = 0; index < 7; index += 1) {
+    const day = new Date(state.availabilityWeekStart);
+    day.setDate(day.getDate() + index);
+    const key = getLocalIsoString(day).slice(0, 10);
+    const daySlots = slotsByDate.get(key) || [];
+
+    const mobileButton = document.createElement('button');
+    mobileButton.type = 'button';
+    mobileButton.className = `mobile-day-btn${index === state.selectedMobileDay ? ' active' : ''}`;
+    mobileButton.textContent = `${day.toLocaleDateString('en-NZ', { weekday: 'short' })} ${day.getDate()}`;
+    mobileButton.addEventListener('click', () => {
+      state.selectedMobileDay = index;
+      renderAvailabilitySchedule();
+    });
+    elements.mobileDaySelector.appendChild(mobileButton);
+
+    const column = document.createElement('section');
+    column.className = `schedule-day${index === state.selectedMobileDay ? '' : ' mobile-hidden'}`;
+    column.innerHTML = `
+      <div class="schedule-day-header">
+        <strong>${day.toLocaleDateString('en-NZ', { weekday: 'short' })}</strong>
+        <span>${day.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>
+      </div>
+      <div class="schedule-slots"></div>
+    `;
+    const slotsContainer = column.querySelector('.schedule-slots');
+    daySlots.forEach((slot) => slotsContainer.appendChild(createScheduleSlot(slot)));
+    if (daySlots.length === 0) {
+      slotsContainer.innerHTML = '<span class="schedule-slot unavailable">No hours</span>';
+    }
+    elements.scheduleDaysGrid.appendChild(column);
+  }
+}
+
+function createScheduleSlot(slot) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  const selected = isSlotSelected(slot);
+  button.className = `schedule-slot ${selected ? 'selected' : slot.status.toLowerCase()}`;
+  button.textContent = new Date(slot.startTime).toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit', hour12: false });
+  button.title = `${button.textContent} — ${selected ? 'Selected' : slot.label}`;
+  button.setAttribute('aria-label', button.title);
+  const waitlistableConflict = !elements.bookingIsKit.value.includes('true')
+    && ['BOOKED', 'PENDING'].includes(slot.status);
+  button.disabled = slot.status !== 'AVAILABLE' && !waitlistableConflict;
+  if (slot.status === 'AVAILABLE') {
+    button.addEventListener('click', () => selectScheduleSlot(slot));
+  } else if (waitlistableConflict) {
+    button.addEventListener('click', () => selectConflictingSlot(slot));
+  }
+  return button;
+}
+
+function selectConflictingSlot(slot) {
+  state.selectedScheduleStart = slot.startTime.slice(0, 16);
+  state.selectedScheduleEnd = slot.endTime.slice(0, 16);
+  elements.bookingStartTime.value = state.selectedScheduleStart;
+  elements.bookingEndTime.min = state.selectedScheduleStart;
+  elements.bookingEndTime.value = state.selectedScheduleEnd;
+  updateDurationPreview();
+  renderAvailabilitySchedule();
+}
+
+function isSlotSelected(slot) {
+  if (!state.selectedScheduleStart || !state.selectedScheduleEnd) return false;
+  return new Date(slot.startTime) >= new Date(state.selectedScheduleStart)
+    && new Date(slot.endTime) <= new Date(state.selectedScheduleEnd);
+}
+
+function selectScheduleSlot(slot) {
+  const clickedStart = new Date(slot.startTime);
+  const clickedEnd = new Date(slot.endTime);
+  let selectionStart = clickedStart;
+  let selectionEnd = clickedEnd;
+
+  if (state.selectedScheduleStart && state.selectedScheduleEnd) {
+    const currentStart = new Date(state.selectedScheduleStart);
+    const currentEnd = new Date(state.selectedScheduleEnd);
+    const sameDay = currentStart.toDateString() === clickedStart.toDateString();
+    const clickedOutside = clickedStart < currentStart || clickedStart >= currentEnd;
+    if (sameDay && clickedOutside) {
+      selectionStart = clickedStart < currentStart ? clickedStart : currentStart;
+      selectionEnd = clickedEnd > currentEnd ? clickedEnd : currentEnd;
+      if (!isRangeAvailable(selectionStart, selectionEnd)) {
+        showToast('Unavailable Range', 'Your selection crosses a blocked period. Choose a continuous green range.', 'warning');
+        return;
+      }
+    }
+  }
+
+  state.selectedScheduleStart = getLocalIsoString(selectionStart);
+  state.selectedScheduleEnd = getLocalIsoString(selectionEnd);
+  elements.bookingStartTime.value = state.selectedScheduleStart;
+  elements.bookingEndTime.min = state.selectedScheduleStart;
+  elements.bookingEndTime.value = state.selectedScheduleEnd;
+  updateDurationPreview();
+  renderAvailabilitySchedule();
+}
+
+function clearScheduleSelection(render = true) {
+  state.selectedScheduleStart = null;
+  state.selectedScheduleEnd = null;
+  elements.bookingStartTime.value = '';
+  elements.bookingEndTime.value = '';
+  updateDurationPreview();
+  if (render && state.availability) renderAvailabilitySchedule();
+}
+
+function isRangeAvailable(start, end) {
+  if (!state.availability) return true;
+  const overlappingSlots = state.availability.slots.filter((slot) =>
+    new Date(slot.startTime) < end && new Date(slot.endTime) > start
+  );
+  if (overlappingSlots.length === 0) return true;
+  return overlappingSlots.every((slot) => slot.status === 'AVAILABLE');
+}
+
+function changeAvailabilityWeek(days) {
+  const next = new Date(state.availabilityWeekStart);
+  next.setDate(next.getDate() + days);
+  state.availabilityWeekStart = next;
+  state.selectedMobileDay = 0;
+  clearScheduleSelection(false);
+  loadAvailability();
 }
 
 // Group Member Tag Helpers
@@ -1413,6 +2083,7 @@ function handleStartTimeChange() {
   }
 
   updateDurationPreview();
+  if (state.availability) renderAvailabilitySchedule();
 }
 
 function handleEndTimeChange() {
@@ -1425,12 +2096,68 @@ function handleEndTimeChange() {
     }
   }
   updateDurationPreview();
+  if (state.availability) renderAvailabilitySchedule();
 }
 
 function updateDurationPreview() {
   const start = elements.bookingStartTime.value;
   const end = elements.bookingEndTime.value;
   elements.modalDurationPreview.textContent = formatDuration(start, end) || '—';
+
+  if (!start || !end || new Date(end) <= new Date(start)) {
+    state.selectedScheduleStart = null;
+    state.selectedScheduleEnd = null;
+    elements.modalSelectedDate.textContent = 'Choose a slot';
+    elements.modalSelectedTime.textContent = '—';
+    elements.selectionValidation.className = 'selection-validation';
+    elements.selectionValidation.textContent = 'Select a green time slot to continue.';
+    elements.conflictBanner.style.display = 'none';
+    return;
+  }
+
+  state.selectedScheduleStart = start;
+  state.selectedScheduleEnd = end;
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  elements.modalSelectedDate.textContent = startDate.toLocaleDateString('en-NZ', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+  elements.modalSelectedTime.textContent = `${startDate.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' })} – ${endDate.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' })}`;
+
+  const available = isRangeAvailable(startDate, endDate);
+  elements.selectionValidation.className = `selection-validation ${available ? 'valid' : 'invalid'}`;
+  elements.selectionValidation.textContent = available
+    ? 'This displayed range is available. The server will verify it again when you book.'
+    : 'This range includes a blocked period. Choose a continuous green range.';
+  updateWaitlistConflictAction(startDate, endDate);
+}
+
+function updateWaitlistConflictAction(start, end, serverConfirmedBookingConflict = false) {
+  const resource = state.selectedResourceForBooking;
+  const isKit = elements.bookingIsKit.value === 'true';
+  const slots = state.availability?.slots?.filter((slot) =>
+    new Date(slot.startTime) < end && new Date(slot.endTime) > start
+  ) || [];
+  const statuses = new Set(slots.map((slot) => slot.status));
+  const hasBookingConflict = serverConfirmedBookingConflict
+    || statuses.has('BOOKED') || statuses.has('PENDING');
+  const hasNonWaitlistableState = ['MAINTENANCE', 'UNAVAILABLE', 'PAST', 'HELD']
+    .some((status) => statuses.has(status));
+  const duplicate = state.userWaitlists.some((entry) =>
+    entry.resourceId === resource?.id
+      && new Date(entry.requestedStart).getTime() === start.getTime()
+      && new Date(entry.requestedEnd).getTime() === end.getTime()
+  );
+  const eligible = resource && !isKit && resource.status === 'AVAILABLE'
+    && start > new Date() && end > start && hasBookingConflict
+    && !hasNonWaitlistableState && !duplicate;
+
+  elements.conflictBanner.style.display = eligible ? 'flex' : 'none';
+  if (eligible) {
+    const time = `${start.toLocaleDateString('en-NZ', { weekday: 'short' })} ${start.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}–${end.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}`;
+    elements.conflictMessage.textContent = 'This exact interval conflicts with an active booking.';
+    elements.joinWaitlistFromConflictBtn.textContent = `Join waitlist for ${time}`;
+  }
 }
 
 // Quick Presets
@@ -1477,6 +2204,12 @@ async function handleBookingSubmit(e) {
     return;
   }
 
+  if (!isRangeAvailable(new Date(startTime), new Date(endTime))) {
+    updateWaitlistConflictAction(new Date(startTime), new Date(endTime));
+    showToast('Unavailable Range', 'This time cannot be booked normally. Join the exact-slot waitlist when offered.', 'warning');
+    return;
+  }
+
   const memberUserIds = state.selectedGroupMembers
     .filter((m) => m.id !== undefined)
     .map((m) => m.id);
@@ -1504,11 +2237,11 @@ async function handleBookingSubmit(e) {
         memberUsernames: memberUsernames.length ? memberUsernames : undefined
       };
 
-      const results = await api.bookKit(kitId, payload);
+      const kitBooking = await api.bookKit(kitId, payload);
       closeBookingModal();
       showToast(
         'Project Kit Reserved!',
-        `Successfully booked all ${results.length} bundled items for "${state.selectedKitForBooking?.name || 'Kit'}" (Status: PENDING Approval)!`,
+        `${kitBooking.bookingReference || 'Your Kit reservation'} covers ${kitBooking.resourceCount || state.selectedKitForBooking?.itemCount || 'all'} bundled resources for "${kitBooking.kitName || state.selectedKitForBooking?.name || 'Kit'}" (Awaiting Approval).`,
         'success',
         5000
       );
@@ -1535,8 +2268,14 @@ async function handleBookingSubmit(e) {
   } catch (err) {
     if (err.status === 409) {
       // Smart Conflict Display
-      elements.conflictBanner.style.display = 'flex';
-      elements.conflictMessage.textContent = err.message;
+      if (!isKit && state.selectedResourceForBooking) {
+        await loadAvailability();
+      }
+      const isBookingConflict = err.message === 'Resource is already booked during this time slot';
+      updateWaitlistConflictAction(new Date(startTime), new Date(endTime), isBookingConflict);
+      if (elements.conflictBanner.style.display === 'flex') {
+        elements.conflictMessage.textContent = err.message;
+      }
       showToast('Conflict Detected', err.message, 'error', 5500);
     } else {
       showToast('Booking Failed', err.message || 'Server error occurred.', 'error');
@@ -1552,32 +2291,28 @@ async function handleBookingSubmit(e) {
 async function handleJoinWaitlistFromConflict() {
   if (!state.selectedResourceForBooking) return;
 
+  const startTime = elements.bookingStartTime.value;
+  const endTime = elements.bookingEndTime.value;
+  if (!startTime || !endTime) return;
+
   try {
     const resource = state.selectedResourceForBooking;
-    await api.joinWaitlist(state.currentUser.id, resource.id);
+    const joined = await api.joinWaitlist(resource.id, startTime, endTime);
+    state.userWaitlists = [
+      joined,
+      ...state.userWaitlists.filter((entry) => entry.id !== joined.id)
+    ];
+    renderMyWaitlists();
+    updateMetrics();
 
     closeBookingModal();
     showToast(
-      'Waitlist Joined!',
-      `You are now in the waitlist queue for ${resource.name}. You'll be auto-promoted when a slot frees up!`,
+      'Exact-slot waitlist joined',
+      `You are waiting for ${resource.name}, ${formatDateTime(startTime)} to ${formatDateTime(endTime)}.`,
       'success'
     );
 
-    await loadAllData();
-  } catch (err) {
-    showToast('Waitlist Notice', err.message, err.status === 409 ? 'warning' : 'error');
-  }
-}
-
-async function handleDirectJoinWaitlist(resource) {
-  try {
-    await api.joinWaitlist(state.currentUser.id, resource.id);
-    showToast(
-      'Waitlist Joined!',
-      `You are in the queue for ${resource.name}. Status: WAITING.`,
-      'success'
-    );
-    await loadAllData();
+    await loadMyWaitlists();
   } catch (err) {
     showToast('Waitlist Notice', err.message, err.status === 409 ? 'warning' : 'error');
   }
@@ -1594,7 +2329,7 @@ async function handleCancelBooking(bookingId, resourceName) {
 
     showToast(
       'Booking Cancelled',
-      `Booking #${bookingId} was cancelled. Waitlist auto-trigger inspected the queue and promoted the next student!`,
+      `Booking #${bookingId} was cancelled. Any matching student will receive a temporary slot offer.`,
       'info',
       6000
     );
@@ -1602,6 +2337,27 @@ async function handleCancelBooking(bookingId, resourceName) {
     await loadAllData();
   } catch (err) {
     showToast('Cancellation Error', err.message, 'error');
+  }
+}
+
+async function handleCancelKitBooking(kitBooking) {
+  const reference = kitBooking.bookingReference || `Kit #${kitBooking.id}`;
+  const kitName = kitBooking.kitName || 'Project Kit';
+  if (!confirm(`Cancel Kit ${reference} (${kitName})? This will cancel all included resource reservations.`)) {
+    return;
+  }
+
+  try {
+    await api.cancelKitBooking(kitBooking.id);
+    showToast(
+      'Kit Cancelled',
+      `${reference} was cancelled and all included resources were released.`,
+      'info',
+      6000
+    );
+    await loadAllData();
+  } catch (err) {
+    showToast('Kit Cancellation Error', err.message, err.status === 409 ? 'warning' : 'error');
   }
 }
 
@@ -1619,6 +2375,24 @@ async function handleReceiptDownload(bookingId) {
     showToast('Receipt Downloaded', `PDF receipt for booking #${bookingId} is ready.`, 'success');
   } catch (err) {
     showToast('Receipt Error', err.message, 'error');
+  }
+}
+
+async function handleKitReceiptDownload(kitBooking) {
+  const reference = kitBooking.bookingReference || `Kit #${kitBooking.id}`;
+  try {
+    const { blob, filename } = await api.downloadKitReceipt(kitBooking.id);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || `${reference}-receipt.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast('Kit Receipt Downloaded', `PDF receipt for ${reference} is ready.`, 'success');
+  } catch (err) {
+    showToast('Kit Receipt Error', err.message, err.status === 403 ? 'warning' : 'error');
   }
 }
 
@@ -1655,12 +2429,36 @@ async function handleIssueSubmit(e) {
       description
     });
     closeIssueModal();
-    showToast('Issue Reported', `${resource.name} is now in maintenance.`, 'success');
+    showToast('Issue Reported', `${resource.name} is waiting for administrator review.`, 'success');
     await loadAllData();
   } catch (err) {
     showToast('Report Failed', err.message, 'error');
   } finally {
     elements.submitIssueBtn.disabled = false;
+  }
+}
+
+async function handleApproveIssue(issue) {
+  if (!confirm(`Approve issue #${issue.issueId} and place ${issue.resourceName} in maintenance?`)) return;
+
+  try {
+    await api.approveIssue(issue.issueId);
+    showToast('Issue Approved', `${issue.resourceName} is now in maintenance.`, 'success');
+    await loadAllData();
+  } catch (err) {
+    showToast('Approval Failed', err.message, 'error');
+  }
+}
+
+async function handleRejectIssue(issue) {
+  if (!confirm(`Reject issue #${issue.issueId} for ${issue.resourceName}?`)) return;
+
+  try {
+    await api.rejectIssue(issue.issueId);
+    showToast('Issue Rejected', `Issue #${issue.issueId} was rejected; resource status was unchanged.`, 'info');
+    await loadAllData();
+  } catch (err) {
+    showToast('Rejection Failed', err.message, 'error');
   }
 }
 
@@ -1694,6 +2492,32 @@ async function handleAdminReject(bookingId) {
     await loadAllData();
   } catch (err) {
     showToast('Error', err.message, 'error');
+  }
+}
+
+async function handleAdminApproveKit(kitBooking) {
+  const reference = kitBooking.bookingReference || `Kit #${kitBooking.id}`;
+  if (!confirm(`Approve Project Kit ${reference} for ${kitBooking.kitName || 'this Kit'}?`)) return;
+
+  try {
+    await api.approveKitBooking(kitBooking.id);
+    showToast('Kit Approved', `${reference} has been approved as one reservation.`, 'success');
+    await loadAllData();
+  } catch (err) {
+    showToast('Kit Approval Error', err.message, err.status === 409 ? 'warning' : 'error');
+  }
+}
+
+async function handleAdminRejectKit(kitBooking) {
+  const reference = kitBooking.bookingReference || `Kit #${kitBooking.id}`;
+  if (!confirm(`Reject Project Kit ${reference} for ${kitBooking.kitName || 'this Kit'}?`)) return;
+
+  try {
+    await api.rejectKitBooking(kitBooking.id);
+    showToast('Kit Rejected', `${reference} has been rejected and its resources were released.`, 'warning');
+    await loadAllData();
+  } catch (err) {
+    showToast('Kit Rejection Error', err.message, err.status === 409 ? 'warning' : 'error');
   }
 }
 
@@ -1760,64 +2584,6 @@ async function handleDeleteResource(resourceId, resourceName) {
   }
 }
 
-// Waitlist Queue Modal
-async function openQueueModal(resource) {
-  state.selectedResourceForQueue = resource;
-  elements.modalQueueTitle.textContent = `${resource.name} — Waitlist Queue`;
-  elements.modalQueueSubtitle.textContent = `Type: ${resource.type} • Status: ${resource.status}`;
-
-  const list = elements.resourceQueueList;
-  list.innerHTML = '<div class="spinner"></div>';
-  elements.waitlistQueueModalBackdrop.classList.add('open');
-
-  try {
-    const queue = await api.getResourceWaitlist(resource.id);
-    renderQueueList(queue);
-  } catch (err) {
-    list.innerHTML = '<p style="color:var(--rose-500);">Failed to load waitlist queue.</p>';
-  }
-}
-
-function renderQueueList(queue) {
-  const list = elements.resourceQueueList;
-  list.innerHTML = '';
-
-  if (!queue || queue.length === 0) {
-    list.innerHTML = `
-      <div class="empty-state" style="padding: 1.5rem 0;">
-        <p style="font-weight: 600; color: var(--slate-700);">Queue is currently empty!</p>
-        <p style="font-size: 0.85rem; margin-top: 0.25rem;">No students are waiting for this resource.</p>
-      </div>
-    `;
-    return;
-  }
-
-  queue.forEach((entry, index) => {
-    const item = document.createElement('div');
-    item.className = 'queue-item';
-
-    item.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 0.85rem;">
-        <div class="queue-pos">#${index + 1}</div>
-        <div>
-          <strong style="color: var(--slate-900); font-size: 0.9rem;">${escapeHtml(entry.username)}</strong>
-          <div style="font-size: 0.75rem; color: var(--slate-500);">Requested: ${formatDateTime(entry.requestTime)}</div>
-        </div>
-      </div>
-      <div>
-        <span class="status-pill ${entry.status}">${escapeHtml(entry.status)}</span>
-      </div>
-    `;
-
-    list.appendChild(item);
-  });
-}
-
-function closeQueueModal() {
-  elements.waitlistQueueModalBackdrop.classList.remove('open');
-  state.selectedResourceForQueue = null;
-}
-
 // ============================================================================
 // Event Listeners Binding
 // ============================================================================
@@ -1861,6 +2627,18 @@ function setupEventListeners() {
     showToast('Refreshed', 'Schedule and queue updated.', 'info', 1800);
   });
 
+  elements.bookingViewTabs.addEventListener('click', (e) => {
+    const tab = e.target.closest('.booking-view-tab');
+    if (!tab) return;
+    state.bookingView = tab.dataset.bookingView;
+    document.querySelectorAll('.booking-view-tab').forEach((button) => {
+      const selected = button === tab;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+    renderMyBookings();
+  });
+
   // Admin Filter Pills
   document.querySelectorAll('.admin-filter-pills .pill-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1882,6 +2660,15 @@ function setupEventListeners() {
 
   elements.bookingForm.addEventListener('submit', handleBookingSubmit);
   elements.joinWaitlistFromConflictBtn.addEventListener('click', handleJoinWaitlistFromConflict);
+  elements.clearSlotSelectionBtn.addEventListener('click', () => clearScheduleSelection());
+  elements.previousWeekBtn.addEventListener('click', () => changeAvailabilityWeek(-7));
+  elements.nextWeekBtn.addEventListener('click', () => changeAvailabilityWeek(7));
+  elements.currentWeekBtn.addEventListener('click', () => {
+    state.availabilityWeekStart = startOfWeek(new Date());
+    state.selectedMobileDay = dayIndexFromMonday(new Date());
+    clearScheduleSelection(false);
+    loadAvailability();
+  });
 
   // Add Group Member Button & Enter key
   if (elements.addGroupMemberBtn) {
@@ -1913,21 +2700,10 @@ function setupEventListeners() {
   elements.cancelIssueModalBtn.addEventListener('click', closeIssueModal);
   elements.issueForm.addEventListener('submit', handleIssueSubmit);
 
-  // Queue Modal
-  elements.closeQueueModalBtn.addEventListener('click', closeQueueModal);
-  elements.closeQueueModalBottomBtn.addEventListener('click', closeQueueModal);
-  elements.joinWaitlistDirectBtn.addEventListener('click', () => {
-    if (state.selectedResourceForQueue) {
-      handleDirectJoinWaitlist(state.selectedResourceForQueue);
-      closeQueueModal();
-    }
-  });
-
   // Close modals on backdrop click or ESC key
   window.addEventListener('click', (e) => {
     if (e.target === elements.bookingModalBackdrop) closeBookingModal();
     if (e.target === elements.addResourceModalBackdrop) closeAddResourceModal();
-    if (e.target === elements.waitlistQueueModalBackdrop) closeQueueModal();
     if (e.target === elements.issueModalBackdrop) closeIssueModal();
   });
 
@@ -1935,7 +2711,6 @@ function setupEventListeners() {
     if (e.key === 'Escape') {
       closeBookingModal();
       closeAddResourceModal();
-      closeQueueModal();
       closeIssueModal();
     }
   });

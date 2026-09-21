@@ -1,13 +1,17 @@
 package com.campusbooking.controller;
 
 import com.campusbooking.model.Resource;
+import com.campusbooking.dto.AvailabilityResponseDTO;
+import com.campusbooking.service.AvailabilityService;
 import com.campusbooking.service.ResourceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.format.annotation.DateTimeFormat;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +33,7 @@ import java.util.Map;
 public class ResourceController {
 
     private final ResourceService resourceService;
+    private final AvailabilityService availabilityService;
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -56,6 +61,15 @@ public class ResourceController {
     public ResponseEntity<List<Resource>> getAvailableResources() {
         List<Resource> available = resourceService.getAvailableResources();
         return ResponseEntity.ok(available);
+    }
+
+    /** Returns a privacy-safe slot schedule that follows the booking conflict rules. */
+    @GetMapping("/{id}/availability")
+    public ResponseEntity<AvailabilityResponseDTO> getAvailability(
+            @PathVariable Long id,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+        return ResponseEntity.ok(availabilityService.getResourceAvailability(id, start, end));
     }
 
     // ── Admin: Create ─────────────────────────────────────────────────────────

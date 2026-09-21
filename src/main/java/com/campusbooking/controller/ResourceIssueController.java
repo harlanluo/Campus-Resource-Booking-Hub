@@ -33,6 +33,18 @@ public class ResourceIssueController {
         return ResponseEntity.ok(issueService.getAllIssues());
     }
 
+    @PutMapping("/{issueId}/approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<IssueResponseDTO> approveIssue(@PathVariable Long issueId) {
+        return ResponseEntity.ok(issueService.approveIssue(issueId));
+    }
+
+    @PutMapping("/{issueId}/reject")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<IssueResponseDTO> rejectIssue(@PathVariable Long issueId) {
+        return ResponseEntity.ok(issueService.rejectIssue(issueId));
+    }
+
     @PutMapping("/{issueId}/resolve")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<IssueResponseDTO> resolveIssue(@PathVariable Long issueId) {

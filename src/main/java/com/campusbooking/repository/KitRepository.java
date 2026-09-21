@@ -31,4 +31,7 @@ public interface KitRepository extends JpaRepository<Kit, Long> {
      */
     @Query("SELECT k FROM Kit k LEFT JOIN FETCH k.resources WHERE k.id = :id")
     Optional<Kit> findByIdWithResources(@Param("id") Long id);
+
+    @Query("SELECT CASE WHEN COUNT(k) > 0 THEN true ELSE false END FROM Kit k JOIN k.resources r WHERE r.id = :resourceId")
+    boolean existsContainingResource(@Param("resourceId") Long resourceId);
 }

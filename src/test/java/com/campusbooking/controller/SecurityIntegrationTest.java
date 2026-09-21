@@ -59,6 +59,10 @@ class SecurityIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(put("/api/bookings/2/approve"))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/kit-bookings/1/approve"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/kit-bookings/1/reject"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -75,6 +79,10 @@ class SecurityIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(put("/api/issues/1/resolve"))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/issues/1/approve"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/issues/1/reject"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -82,6 +90,8 @@ class SecurityIntegrationTest {
     @DisplayName("A student cannot request another user's private booking list")
     void studentCannotReadAnotherUsersBookings() throws Exception {
         mockMvc.perform(get("/api/bookings/user/2"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/bookings/user/2/history"))
                 .andExpect(status().isForbidden());
     }
 
@@ -91,6 +101,12 @@ class SecurityIntegrationTest {
     void studentCanReadOwnBookings() throws Exception {
         mockMvc.perform(get("/api/bookings/user/1"))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/bookings/user/1/history"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/kit-bookings/user/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].bookingReference").value("KIT-2026-000001"))
+                .andExpect(jsonPath("$[0].resourceCount").value(3));
     }
 
     @Test
@@ -112,6 +128,33 @@ class SecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Kit booking creation returns one referenced parent contract")
+    void kitCreationReturnsOneParent() throws Exception {
+        LocalDateTime start = LocalDateTime.now().plusDays(60).withNano(0);
+        String request = """
+                {
+                  "userId": 1,
+                  "startTime": "%s",
+                  "endTime": "%s",
+                  "memberUserIds": [3]
+                }
+                """.formatted(start, start.plusHours(2));
+
+        mockMvc.perform(post("/api/kits/1/book")
+                        .with(user("alice_student").roles("STUDENT"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.bookingReference").value(
+                        org.hamcrest.Matchers.matchesPattern("KIT-[0-9]{4}-[0-9]{6,}")))
+                .andExpect(jsonPath("$.kitName").value("Media Production Kit"))
+                .andExpect(jsonPath("$.resourceCount").value(3))
+                .andExpect(jsonPath("$.includedResources.length()").value(3))
+                .andExpect(jsonPath("$.groupMemberNames[0]").value("maya_chen"));
     }
 
     @Test
@@ -147,6 +190,8 @@ class SecurityIntegrationTest {
                 .getSession(false);
 
         mockMvc.perform(get("/api/bookings").session(session))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/bookings/history").session(session))
                 .andExpect(status().isOk());
     }
 
@@ -187,6 +232,31 @@ class SecurityIntegrationTest {
         mockMvc.perform(put("/api/bookings/{id}/cancel", booking.getId())
                         .with(user("alice_student").roles("STUDENT")))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("A Kit member can view the parent and receipt authorization but cannot cancel it")
+    void kitMemberHasViewOnlyAccess() throws Exception {
+        mockMvc.perform(get("/api/kit-bookings/user/3")
+                        .with(user("maya_chen").roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].bookingReference").value("KIT-2026-000001"));
+        mockMvc.perform(get("/api/kit-bookings/1/receipt")
+                        .with(user("maya_chen").roles("STUDENT")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(put("/api/kit-bookings/1/cancel")
+                        .with(user("maya_chen").roles("STUDENT")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("The Kit owner can cancel the whole parent once")
+    void kitOwnerCanCancelAggregate() throws Exception {
+        mockMvc.perform(put("/api/kit-bookings/1/cancel")
+                        .with(user("alice_student").roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.resourceCount").value(3));
     }
 
     @Test

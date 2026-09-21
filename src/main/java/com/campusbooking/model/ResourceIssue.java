@@ -33,7 +33,7 @@ public class ResourceIssue {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private Status status = Status.OPEN;
+    private Status status = Status.PENDING;
 
     @CreationTimestamp
     @Column(name = "reported_time", nullable = false, updatable = false)
@@ -43,6 +43,6 @@ public class ResourceIssue {
     private LocalDateTime resolvedTime;
 
     public enum Status {
-        OPEN, RESOLVED
+        PENDING, OPEN, REJECTED, RESOLVED
     }
 }

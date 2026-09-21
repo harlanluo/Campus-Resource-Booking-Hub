@@ -37,10 +37,70 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     @Query("""
            SELECT DISTINCT b FROM Booking b
            LEFT JOIN b.groupMembers m
-           WHERE b.user.id = :userId OR m.id = :userId
+           WHERE (b.user.id = :userId OR m.id = :userId)
+             AND b.kitBooking IS NULL
            ORDER BY b.startTime DESC
            """)
     List<Booking> findAllUserBookings(@Param("userId") Long userId);
+
+    /**
+     * Returns only current/future bookings that belong on the normal student
+     * dashboard, including bookings shared with the user as a group member.
+     */
+    @Query("""
+           SELECT DISTINCT b FROM Booking b
+           LEFT JOIN b.groupMembers m
+           WHERE (b.user.id = :userId OR m.id = :userId)
+             AND b.kitBooking IS NULL
+             AND b.status IN (com.campusbooking.model.Booking.Status.PENDING,
+                              com.campusbooking.model.Booking.Status.CONFIRMED,
+                              com.campusbooking.model.Booking.Status.APPROVED)
+             AND b.endTime > :cutoff
+           ORDER BY b.startTime
+           """)
+    List<Booking> findActiveUserBookings(
+            @Param("userId") Long userId,
+            @Param("cutoff") LocalDateTime cutoff);
+
+    /** Returns closed or expired bookings for a student, including shared bookings. */
+    @Query("""
+           SELECT DISTINCT b FROM Booking b
+           LEFT JOIN b.groupMembers m
+           WHERE (b.user.id = :userId OR m.id = :userId)
+             AND b.kitBooking IS NULL
+             AND (b.status IN (com.campusbooking.model.Booking.Status.CANCELLED,
+                               com.campusbooking.model.Booking.Status.REJECTED,
+                               com.campusbooking.model.Booking.Status.COMPLETED)
+                  OR b.endTime <= :cutoff)
+           ORDER BY b.endTime DESC
+           """)
+    List<Booking> findHistoryUserBookings(
+            @Param("userId") Long userId,
+            @Param("cutoff") LocalDateTime cutoff);
+
+    /** Returns current/future pending and approved bookings for the admin queue. */
+    @Query("""
+           SELECT b FROM Booking b
+           WHERE b.kitBooking IS NULL
+             AND b.status IN (com.campusbooking.model.Booking.Status.PENDING,
+                              com.campusbooking.model.Booking.Status.CONFIRMED,
+                              com.campusbooking.model.Booking.Status.APPROVED)
+             AND b.endTime > :cutoff
+           ORDER BY b.startTime
+           """)
+    List<Booking> findActiveAdminBookings(@Param("cutoff") LocalDateTime cutoff);
+
+    /** Returns closed or expired bookings for optional administrative review. */
+    @Query("""
+           SELECT b FROM Booking b
+           WHERE b.kitBooking IS NULL
+             AND (b.status IN (com.campusbooking.model.Booking.Status.CANCELLED,
+                              com.campusbooking.model.Booking.Status.REJECTED,
+                              com.campusbooking.model.Booking.Status.COMPLETED)
+                  OR b.endTime <= :cutoff)
+           ORDER BY b.endTime DESC
+           """)
+    List<Booking> findHistoryAdminBookings(@Param("cutoff") LocalDateTime cutoff);
 
 
     /**
@@ -50,6 +110,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      * @return list of bookings for that resource
      */
     List<Booking> findByResourceId(Long resourceId);
+
+    List<Booking> findByKitBookingIdOrderByResourceId(Long kitBookingId);
+
+    boolean existsByResourceId(Long resourceId);
 
     /**
      * Returns all bookings with a given status.

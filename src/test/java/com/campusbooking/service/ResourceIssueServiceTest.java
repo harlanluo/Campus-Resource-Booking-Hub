@@ -58,12 +58,18 @@ class ResourceIssueServiceTest {
                 .reportedTime(LocalDateTime.now().minusHours(1)).build();
     }
 
+    private ResourceIssue pendingIssue() {
+        ResourceIssue issue = openIssue();
+        issue.setStatus(ResourceIssue.Status.PENDING);
+        return issue;
+    }
+
     @Nested
     @DisplayName("reportIssue")
     class ReportIssue {
         @Test
-        @DisplayName("Stores an open issue and moves the resource to maintenance")
-        void validReport_createsIssueAndSetsMaintenance() {
+        @DisplayName("Stores a pending issue without changing resource availability")
+        void validReport_createsPendingIssueWithoutMaintenance() {
             given(resourceRepository.findById(2L)).willReturn(Optional.of(resource));
             given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
             given(issueRepository.save(any(ResourceIssue.class))).willAnswer(invocation -> {
@@ -76,9 +82,9 @@ class ResourceIssueServiceTest {
             IssueResponseDTO result = issueService.reportIssue(request());
 
             assertThat(result.getIssueId()).isEqualTo(10L);
-            assertThat(result.getStatus()).isEqualTo(ResourceIssue.Status.OPEN);
-            assertThat(resource.getStatus()).isEqualTo(Resource.Status.MAINTENANCE);
-            then(resourceRepository).should().save(resource);
+            assertThat(result.getStatus()).isEqualTo(ResourceIssue.Status.PENDING);
+            assertThat(resource.getStatus()).isEqualTo(Resource.Status.AVAILABLE);
+            then(resourceRepository).should(never()).save(any(Resource.class));
         }
 
         @Test
@@ -98,6 +104,49 @@ class ResourceIssueServiceTest {
             assertThatThrownBy(() -> issueService.reportIssue(request()))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
             then(issueRepository).shouldHaveNoInteractions();
+        }
+    }
+
+    @Nested
+    @DisplayName("approveIssue / rejectIssue")
+    class ReviewIssue {
+        @Test
+        @DisplayName("Approving a pending issue opens it and moves the resource to maintenance")
+        void approvePendingIssue_setsOpenAndMaintenance() {
+            ResourceIssue issue = pendingIssue();
+            given(issueRepository.findById(10L)).willReturn(Optional.of(issue));
+            given(issueRepository.save(any(ResourceIssue.class))).willAnswer(inv -> inv.getArgument(0));
+
+            IssueResponseDTO result = issueService.approveIssue(10L);
+
+            assertThat(result.getStatus()).isEqualTo(ResourceIssue.Status.OPEN);
+            assertThat(resource.getStatus()).isEqualTo(Resource.Status.MAINTENANCE);
+            then(resourceRepository).should().save(resource);
+        }
+
+        @Test
+        @DisplayName("Rejecting a pending issue leaves the resource status unchanged")
+        void rejectPendingIssue_setsRejectedWithoutMaintenance() {
+            ResourceIssue issue = pendingIssue();
+            given(issueRepository.findById(10L)).willReturn(Optional.of(issue));
+            given(issueRepository.save(any(ResourceIssue.class))).willAnswer(inv -> inv.getArgument(0));
+
+            IssueResponseDTO result = issueService.rejectIssue(10L);
+
+            assertThat(result.getStatus()).isEqualTo(ResourceIssue.Status.REJECTED);
+            assertThat(resource.getStatus()).isEqualTo(Resource.Status.AVAILABLE);
+            then(resourceRepository).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("Only pending issues can be reviewed")
+        void reviewNonPendingIssue_returns400() {
+            given(issueRepository.findById(10L)).willReturn(Optional.of(openIssue()));
+
+            assertThatThrownBy(() -> issueService.approveIssue(10L))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("400");
+            assertThatThrownBy(() -> issueService.rejectIssue(10L))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("400");
         }
     }
 
@@ -164,10 +213,10 @@ class ResourceIssueServiceTest {
         }
 
         @Test
-        @DisplayName("Rejects an issue that is already resolved")
-        void alreadyResolved_returns400() {
+        @DisplayName("Only approved open issues can be resolved")
+        void nonOpenIssue_returns400() {
             ResourceIssue issue = openIssue();
-            issue.setStatus(ResourceIssue.Status.RESOLVED);
+            issue.setStatus(ResourceIssue.Status.PENDING);
             given(issueRepository.findById(10L)).willReturn(Optional.of(issue));
             assertThatThrownBy(() -> issueService.resolveIssue(10L))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("400");

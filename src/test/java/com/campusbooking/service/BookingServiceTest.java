@@ -4,19 +4,18 @@ import com.campusbooking.dto.BookingRequestDTO;
 import com.campusbooking.dto.BookingResponseDTO;
 import com.campusbooking.exception.BookingConflictException;
 import com.campusbooking.model.Booking;
+import com.campusbooking.model.KitBooking;
 import com.campusbooking.model.Resource;
 import com.campusbooking.model.User;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
-import com.campusbooking.repository.WaitlistRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
@@ -52,7 +51,7 @@ class BookingServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private WaitlistRepository waitlistRepository;
+    private WaitlistService waitlistService;
 
     @InjectMocks
     private BookingService bookingService;
@@ -399,7 +398,8 @@ class BookingServiceTest {
                     .build();
 
             given(userRepository.existsById(testUser.getId())).willReturn(true);
-            given(bookingRepository.findAllUserBookings(testUser.getId())).willReturn(List.of(b));
+            given(bookingRepository.findActiveUserBookings(eq(testUser.getId()), any(LocalDateTime.class)))
+                    .willReturn(List.of(b));
 
             List<BookingResponseDTO> result = bookingService.getUserBookings(testUser.getId());
 
@@ -428,7 +428,8 @@ class BookingServiceTest {
                     .build();
 
             given(userRepository.existsById(testUser.getId())).willReturn(true);
-            given(bookingRepository.findAllUserBookings(testUser.getId())).willReturn(List.of(sharedBooking));
+            given(bookingRepository.findActiveUserBookings(eq(testUser.getId()), any(LocalDateTime.class)))
+                    .willReturn(List.of(sharedBooking));
 
             List<BookingResponseDTO> result = bookingService.getUserBookings(testUser.getId());
 
@@ -448,6 +449,53 @@ class BookingServiceTest {
                     .isInstanceOf(ResponseStatusException.class)
                     .hasMessageContaining("404");
         }
+    }
+
+    @Test
+    @DisplayName("getAllBookings returns the active admin queue projection")
+    void getAllBookings_returnsActiveAdminBookings() {
+        Booking active = Booking.builder()
+                .id(26L).user(testUser).resource(testResource)
+                .startTime(futureStart).endTime(futureEnd)
+                .status(Booking.Status.APPROVED)
+                .build();
+        given(bookingRepository.findActiveAdminBookings(any(LocalDateTime.class)))
+                .willReturn(List.of(active));
+
+        List<BookingResponseDTO> result = bookingService.getAllBookings();
+
+        assertThat(result).extracting(BookingResponseDTO::getBookingId).containsExactly(26L);
+    }
+
+    @Test
+    @DisplayName("Booking history derives completed status for past approved and confirmed bookings")
+    void getUserBookingHistory_classifiesSuccessfulPastBookingsAsCompleted() {
+        Booking pastApproved = Booking.builder()
+                .id(27L).user(testUser).resource(testResource)
+                .startTime(LocalDateTime.now().minusHours(3))
+                .endTime(LocalDateTime.now().minusHours(2))
+                .status(Booking.Status.APPROVED)
+                .build();
+        Booking pastConfirmed = Booking.builder()
+                .id(28L).user(testUser).resource(testResource)
+                .startTime(LocalDateTime.now().minusHours(2))
+                .endTime(LocalDateTime.now().minusHours(1))
+                .status(Booking.Status.CONFIRMED)
+                .build();
+        Booking cancelled = Booking.builder()
+                .id(29L).user(testUser).resource(testResource)
+                .startTime(futureStart).endTime(futureEnd)
+                .status(Booking.Status.CANCELLED)
+                .build();
+
+        given(userRepository.existsById(testUser.getId())).willReturn(true);
+        given(bookingRepository.findHistoryUserBookings(eq(testUser.getId()), any(LocalDateTime.class)))
+                .willReturn(List.of(pastApproved, pastConfirmed, cancelled));
+
+        List<BookingResponseDTO> result = bookingService.getUserBookingHistory(testUser.getId());
+
+        assertThat(result).extracting(BookingResponseDTO::getStatus)
+                .containsExactly(Booking.Status.COMPLETED, Booking.Status.COMPLETED, Booking.Status.CANCELLED);
     }
 
 
@@ -470,19 +518,28 @@ class BookingServiceTest {
 
             given(bookingRepository.findById(30L)).willReturn(Optional.of(pending));
             given(bookingRepository.save(any(Booking.class))).willAnswer(inv -> inv.getArgument(0));
-            // Waitlist: no waiting entries for this resource
-            given(waitlistRepository.findByResourceIdAndStatusOrderByRequestTimeAsc(
-                    anyLong(), any())).willReturn(Collections.emptyList());
-
             BookingResponseDTO result = bookingService.cancelBooking(30L);
 
             assertThat(result.getStatus()).isEqualTo(Booking.Status.CANCELLED);
+            then(waitlistService).should().offerReleasedSlot(testResource, futureStart, futureEnd);
         }
 
         @Test
-        @DisplayName("Promotes earliest WAITING waitlist entry when a booking is cancelled")
-        void whenCancelled_andWaitlistExists_thenFirstEntryIsPromoted() {
-            // Arrange – the booking being cancelled
+        @DisplayName("An approved future booking can be cancelled")
+        void whenBookingIsApproved_thenCancelSucceeds() {
+            Booking approved = Booking.builder()
+                    .id(34L).user(testUser).resource(testResource)
+                    .startTime(futureStart).endTime(futureEnd)
+                    .status(Booking.Status.APPROVED)
+                    .build();
+            given(bookingRepository.findById(34L)).willReturn(Optional.of(approved));
+            given(bookingRepository.save(any(Booking.class))).willAnswer(inv -> inv.getArgument(0));
+            assertThat(bookingService.cancelBooking(34L).getStatus()).isEqualTo(Booking.Status.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("Releasing a booking delegates exact-slot offer creation without adding a booking")
+        void whenCancelled_thenExactSlotOfferIsTriggeredWithoutBookingCreation() {
             Booking pending = Booking.builder()
                     .id(33L).user(testUser).resource(testResource)
                     .startTime(futureStart).endTime(futureEnd)
@@ -492,45 +549,10 @@ class BookingServiceTest {
             given(bookingRepository.findById(33L)).willReturn(Optional.of(pending));
             given(bookingRepository.save(any(Booking.class))).willAnswer(inv -> inv.getArgument(0));
 
-            // Arrange – one WAITING waitlist entry exists
-            User waitlistedUser = User.builder()
-                    .id(2L)
-                    .username("next_student")
-                    .role(User.Role.STUDENT)
-                    .build();
-            com.campusbooking.model.Waitlist waitlistEntry =
-                    com.campusbooking.model.Waitlist.builder()
-                            .id(1L)
-                            .user(waitlistedUser)
-                            .resource(testResource)
-                            .requestTime(java.time.LocalDateTime.now().minusHours(1))
-                            .status(com.campusbooking.model.Waitlist.Status.WAITING)
-                            .build();
-
-            given(waitlistRepository.findByResourceIdAndStatusOrderByRequestTimeAsc(
-                    eq(testResource.getId()),
-                    eq(com.campusbooking.model.Waitlist.Status.WAITING)))
-                    .willReturn(List.of(waitlistEntry));
-            given(waitlistRepository.save(any(com.campusbooking.model.Waitlist.class)))
-                    .willAnswer(inv -> inv.getArgument(0));
-
-            // Act
             bookingService.cancelBooking(33L);
 
-            // Assert – waitlist entry was promoted
-            then(waitlistRepository).should(times(1))
-                    .save(argThat(w ->
-                            w.getStatus() == com.campusbooking.model.Waitlist.Status.PROMOTED));
-
-            ArgumentCaptor<Booking> bookingCaptor = ArgumentCaptor.forClass(Booking.class);
-            then(bookingRepository).should(times(2)).save(bookingCaptor.capture());
-            assertThat(bookingCaptor.getAllValues()).anySatisfy(promotedBooking -> {
-                assertThat(promotedBooking.getUser()).isEqualTo(waitlistedUser);
-                assertThat(promotedBooking.getResource()).isEqualTo(testResource);
-                assertThat(promotedBooking.getStartTime()).isEqualTo(futureStart);
-                assertThat(promotedBooking.getEndTime()).isEqualTo(futureEnd);
-                assertThat(promotedBooking.getStatus()).isEqualTo(Booking.Status.PENDING);
-            });
+            then(waitlistService).should().offerReleasedSlot(testResource, futureStart, futureEnd);
+            then(bookingRepository).should(times(1)).save(pending);
         }
 
         @Test
@@ -544,8 +566,8 @@ class BookingServiceTest {
         }
 
         @Test
-        @DisplayName("Throws 400 when booking is already cancelled")
-        void whenAlreadyCancelled_thenThrows400() {
+        @DisplayName("Rejects cancellation when booking is already cancelled")
+        void whenAlreadyCancelled_thenThrows409() {
             Booking cancelled = Booking.builder()
                     .id(31L).user(testUser).resource(testResource)
                     .startTime(futureStart).endTime(futureEnd)
@@ -556,12 +578,12 @@ class BookingServiceTest {
 
             assertThatThrownBy(() -> bookingService.cancelBooking(31L))
                     .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("400");
+                    .hasMessageContaining("409");
         }
 
         @Test
-        @DisplayName("Throws 400 when booking is already completed")
-        void whenCompleted_thenThrows400() {
+        @DisplayName("Rejects cancellation when booking is already completed")
+        void whenCompleted_thenThrows409() {
             Booking completed = Booking.builder()
                     .id(32L).user(testUser).resource(testResource)
                     .startTime(futureStart).endTime(futureEnd)
@@ -572,7 +594,58 @@ class BookingServiceTest {
 
             assertThatThrownBy(() -> bookingService.cancelBooking(32L))
                     .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("400");
+                    .hasMessageContaining("409");
+        }
+
+        @Test
+        @DisplayName("A rejected booking cannot be cancelled")
+        void whenRejected_thenThrows409() {
+            Booking rejected = Booking.builder()
+                    .id(35L).user(testUser).resource(testResource)
+                    .startTime(futureStart).endTime(futureEnd)
+                    .status(Booking.Status.REJECTED)
+                    .build();
+            given(bookingRepository.findById(35L)).willReturn(Optional.of(rejected));
+
+            assertThatThrownBy(() -> bookingService.cancelBooking(35L))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("409")
+                    .hasMessageContaining("REJECTED to CANCELLED");
+        }
+
+        @Test
+        @DisplayName("A past approved booking is effectively completed and cannot be cancelled")
+        void whenPastApproved_thenThrows409() {
+            Booking completed = Booking.builder()
+                    .id(36L).user(testUser).resource(testResource)
+                    .startTime(LocalDateTime.now().minusHours(2))
+                    .endTime(LocalDateTime.now().minusHours(1))
+                    .status(Booking.Status.APPROVED)
+                    .build();
+            given(bookingRepository.findById(36L)).willReturn(Optional.of(completed));
+
+            assertThatThrownBy(() -> bookingService.cancelBooking(36L))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("409")
+                    .hasMessageContaining("Completed");
+        }
+
+        @Test
+        @DisplayName("A Kit child cannot be cancelled independently")
+        void whenKitChild_thenThrows409() {
+            Booking child = Booking.builder()
+                    .id(37L).user(testUser).resource(testResource)
+                    .kitBooking(KitBooking.builder().id(8L)
+                            .bookingReference("KIT-2026-000008").build())
+                    .startTime(futureStart).endTime(futureEnd)
+                    .status(Booking.Status.PENDING).build();
+            given(bookingRepository.findById(37L)).willReturn(Optional.of(child));
+
+            assertThatThrownBy(() -> bookingService.cancelBooking(37L))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("409")
+                    .hasMessageContaining("parent Kit");
+            then(bookingRepository).should(never()).save(any());
         }
     }
 
@@ -583,6 +656,24 @@ class BookingServiceTest {
     @Nested
     @DisplayName("Admin — approveBooking / rejectBooking")
     class AdminApproveReject {
+
+        @Test
+        @DisplayName("A Kit child cannot be approved or rejected independently")
+        void kitChildLifecycleActionsThrow409() {
+            Booking child = Booking.builder()
+                    .id(39L).user(testUser).resource(testResource)
+                    .kitBooking(KitBooking.builder().id(8L)
+                            .bookingReference("KIT-2026-000008").build())
+                    .startTime(futureStart).endTime(futureEnd)
+                    .status(Booking.Status.PENDING).build();
+            given(bookingRepository.findById(39L)).willReturn(Optional.of(child));
+
+            assertThatThrownBy(() -> bookingService.approveBooking(39L))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("409");
+            assertThatThrownBy(() -> bookingService.rejectBooking(39L))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("409");
+            then(bookingRepository).should(never()).save(any());
+        }
 
         @Test
         @DisplayName("approveBooking sets status to APPROVED and returns updated DTO")
@@ -618,6 +709,7 @@ class BookingServiceTest {
 
             assertThat(result.getStatus()).isEqualTo(Booking.Status.REJECTED);
             then(bookingRepository).should(times(1)).save(any(Booking.class));
+            then(waitlistService).should().offerReleasedSlot(testResource, futureStart, futureEnd);
         }
 
         @Test
@@ -641,8 +733,8 @@ class BookingServiceTest {
         }
 
         @Test
-        @DisplayName("approveBooking throws 400 when booking is already cancelled")
-        void approveBooking_whenCancelled_thenThrows400() {
+        @DisplayName("approveBooking rejects a cancelled booking")
+        void approveBooking_whenCancelled_thenThrows409() {
             Booking cancelled = Booking.builder()
                     .id(42L).user(testUser).resource(testResource)
                     .startTime(futureStart).endTime(futureEnd)
@@ -653,12 +745,12 @@ class BookingServiceTest {
 
             assertThatThrownBy(() -> bookingService.approveBooking(42L))
                     .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("400");
+                    .hasMessageContaining("409");
         }
 
         @Test
-        @DisplayName("rejectBooking throws 400 when booking is already completed")
-        void rejectBooking_whenCompleted_thenThrows400() {
+        @DisplayName("rejectBooking rejects a completed booking")
+        void rejectBooking_whenCompleted_thenThrows409() {
             Booking completed = Booking.builder()
                     .id(43L).user(testUser).resource(testResource)
                     .startTime(futureStart).endTime(futureEnd)
@@ -669,7 +761,68 @@ class BookingServiceTest {
 
             assertThatThrownBy(() -> bookingService.rejectBooking(43L))
                     .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("400");
+                    .hasMessageContaining("409");
+        }
+
+        @Test
+        @DisplayName("approveBooking rejects a completed booking")
+        void approveBooking_whenCompleted_thenThrows409() {
+            Booking completed = Booking.builder()
+                    .id(47L).user(testUser).resource(testResource)
+                    .startTime(futureStart).endTime(futureEnd)
+                    .status(Booking.Status.COMPLETED)
+                    .build();
+            given(bookingRepository.findById(47L)).willReturn(Optional.of(completed));
+
+            assertThatThrownBy(() -> bookingService.approveBooking(47L))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("409")
+                    .hasMessageContaining("Completed");
+        }
+
+        @Test
+        @DisplayName("A rejected booking cannot be approved")
+        void approveBooking_whenRejected_thenThrows409() {
+            Booking rejected = Booking.builder()
+                    .id(44L).user(testUser).resource(testResource)
+                    .startTime(futureStart).endTime(futureEnd)
+                    .status(Booking.Status.REJECTED)
+                    .build();
+            given(bookingRepository.findById(44L)).willReturn(Optional.of(rejected));
+
+            assertThatThrownBy(() -> bookingService.approveBooking(44L))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("REJECTED to APPROVED");
+        }
+
+        @Test
+        @DisplayName("An approved booking cannot be rejected")
+        void rejectBooking_whenApproved_thenThrows409() {
+            Booking approved = Booking.builder()
+                    .id(45L).user(testUser).resource(testResource)
+                    .startTime(futureStart).endTime(futureEnd)
+                    .status(Booking.Status.APPROVED)
+                    .build();
+            given(bookingRepository.findById(45L)).willReturn(Optional.of(approved));
+
+            assertThatThrownBy(() -> bookingService.rejectBooking(45L))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("APPROVED to REJECTED");
+        }
+
+        @Test
+        @DisplayName("A cancelled booking cannot be rejected")
+        void rejectBooking_whenCancelled_thenThrows409() {
+            Booking cancelled = Booking.builder()
+                    .id(46L).user(testUser).resource(testResource)
+                    .startTime(futureStart).endTime(futureEnd)
+                    .status(Booking.Status.CANCELLED)
+                    .build();
+            given(bookingRepository.findById(46L)).willReturn(Optional.of(cancelled));
+
+            assertThatThrownBy(() -> bookingService.rejectBooking(46L))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("CANCELLED to REJECTED");
         }
     }
 }

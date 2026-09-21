@@ -36,6 +36,13 @@ public class Booking {
     @JoinColumn(name = "resource_id", nullable = false)
     private Resource resource;
 
+    /** Parent product reservation when this row is an internal Project Kit hold. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "kit_booking_id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private KitBooking kitBooking;
+
     @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;
 

@@ -1,57 +1,133 @@
 package com.campusbooking.repository;
 
 import com.campusbooking.model.Waitlist;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
-/**
- * Spring Data JPA repository for {@link Waitlist} entities.
- *
- * <p>Inherits standard CRUD and pagination operations from {@link JpaRepository}.
- * Custom query methods follow Spring Data naming conventions.</p>
- */
 @Repository
 public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
 
-    /**
-     * Returns all waitlist entries for a specific user.
-     *
-     * @param userId the ID of the user
-     * @return list of that user's waitlist entries
-     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT w FROM Waitlist w WHERE w.id = :id")
+    Optional<Waitlist> findByIdForUpdate(@Param("id") Long id);
+
+    List<Waitlist> findByUserIdAndStatusInOrderByRequestedStartAscRequestTimeAscIdAsc(
+            Long userId, Collection<Waitlist.Status> statuses);
+
     List<Waitlist> findByUserId(Long userId);
 
-    /**
-     * Returns all waitlist entries for a specific resource.
-     *
-     * @param resourceId the ID of the resource
-     * @return list of waitlist entries for that resource
-     */
-    List<Waitlist> findByResourceId(Long resourceId);
+    @Query("""
+           SELECT w FROM Waitlist w
+           WHERE w.status IN :statuses
+           ORDER BY w.resource.id, w.requestedStart, w.requestedEnd, w.requestTime, w.id
+           """)
+    List<Waitlist> findByStatusInOrderBySlot(
+            @Param("statuses") Collection<Waitlist.Status> statuses);
 
-    /**
-     * Returns all WAITING entries for a resource, ordered oldest-first.
-     * Useful for promoting the next person in the queue when a slot opens.
-     *
-     * @param resourceId the ID of the resource
-     * @param status     the desired {@link Waitlist.Status} (typically WAITING)
-     * @return ordered list of waitlist entries
-     */
-    List<Waitlist> findByResourceIdAndStatusOrderByRequestTimeAsc(
-            Long resourceId, Waitlist.Status status
-    );
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+           SELECT w FROM Waitlist w
+           WHERE w.resource.id = :resourceId
+             AND w.requestedStart = :startTime
+             AND w.requestedEnd = :endTime
+             AND w.status = com.campusbooking.model.Waitlist.Status.WAITING
+           ORDER BY w.requestTime, w.id
+           """)
+    List<Waitlist> findWaitingForSlotForUpdate(
+            @Param("resourceId") Long resourceId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
 
-    /**
-     * Checks whether a user already has an active waitlist entry for a resource.
-     *
-     * @param userId     the user's ID
-     * @param resourceId the resource's ID
-     * @param status     the status to check for (typically WAITING)
-     * @return {@code true} if a matching entry exists
-     */
-    boolean existsByUserIdAndResourceIdAndStatus(
-            Long userId, Long resourceId, Waitlist.Status status
-    );
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+           SELECT w FROM Waitlist w
+           WHERE w.resource.id = :resourceId
+             AND w.status = com.campusbooking.model.Waitlist.Status.WAITING
+             AND w.requestedStart < :releasedEnd
+             AND w.requestedEnd > :releasedStart
+           ORDER BY w.requestTime, w.id
+           """)
+    List<Waitlist> findWaitingAffectedByReleaseForUpdate(
+            @Param("resourceId") Long resourceId,
+            @Param("releasedStart") LocalDateTime releasedStart,
+            @Param("releasedEnd") LocalDateTime releasedEnd);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+           SELECT w FROM Waitlist w
+           WHERE w.resource.id = :resourceId
+             AND w.requestedStart = :startTime
+             AND w.requestedEnd = :endTime
+             AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
+           ORDER BY w.id
+           """)
+    List<Waitlist> findOfferedForSlotForUpdate(
+            @Param("resourceId") Long resourceId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
+
+    @Query("""
+           SELECT CASE WHEN COUNT(w) > 0 THEN true ELSE false END FROM Waitlist w
+           WHERE w.user.id = :userId
+             AND w.resource.id = :resourceId
+             AND w.requestedStart = :startTime
+             AND w.requestedEnd = :endTime
+             AND w.status IN (com.campusbooking.model.Waitlist.Status.WAITING,
+                              com.campusbooking.model.Waitlist.Status.OFFERED)
+           """)
+    boolean existsActiveExactRequest(
+            @Param("userId") Long userId,
+            @Param("resourceId") Long resourceId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
+
+    @Query("""
+           SELECT COUNT(w) FROM Waitlist w
+           WHERE w.resource.id = :resourceId
+             AND w.requestedStart = :startTime
+             AND w.requestedEnd = :endTime
+             AND w.status = com.campusbooking.model.Waitlist.Status.WAITING
+             AND (w.requestTime < :requestTime
+                  OR (w.requestTime = :requestTime AND w.id <= :id))
+           """)
+    long queuePosition(
+            @Param("resourceId") Long resourceId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("requestTime") LocalDateTime requestTime,
+            @Param("id") Long id);
+
+    @Query("""
+           SELECT w FROM Waitlist w
+           WHERE w.resource.id = :resourceId
+             AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
+             AND (w.offerExpiresAt IS NULL OR w.offerExpiresAt <= :now)
+           ORDER BY w.offerExpiresAt, w.id
+           """)
+    List<Waitlist> findExpiredOffersForResource(
+            @Param("resourceId") Long resourceId,
+            @Param("now") LocalDateTime now);
+
+    @Query("""
+           SELECT w FROM Waitlist w
+           WHERE w.resource.id = :resourceId
+             AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
+             AND w.offerExpiresAt > :now
+             AND w.requestedStart < :endTime
+             AND w.requestedEnd > :startTime
+           """)
+    List<Waitlist> findActiveOffersOverlapping(
+            @Param("resourceId") Long resourceId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("now") LocalDateTime now);
 }

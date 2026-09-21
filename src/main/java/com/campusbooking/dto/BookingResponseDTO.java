@@ -71,6 +71,11 @@ public class BookingResponseDTO {
      * @return a fully-populated {@code BookingResponseDTO}
      */
     public static BookingResponseDTO from(Booking booking) {
+        return from(booking, LocalDateTime.now());
+    }
+
+    /** Maps a booking using one clock value for lifecycle classification. */
+    public static BookingResponseDTO from(Booking booking, LocalDateTime now) {
         java.util.List<Long> memberIds = java.util.Collections.emptyList();
         java.util.List<String> memberNames = java.util.Collections.emptyList();
 
@@ -92,11 +97,19 @@ public class BookingResponseDTO {
                 .resourceType(booking.getResource().getType())
                 .startTime(booking.getStartTime())
                 .endTime(booking.getEndTime())
-                .status(booking.getStatus())
+                .status(effectiveStatus(booking, now))
                 .groupMemberIds(memberIds)
                 .groupMemberNames(memberNames)
                 .groupBooking(!memberNames.isEmpty())
                 .build();
     }
-}
 
+    private static Booking.Status effectiveStatus(Booking booking, LocalDateTime now) {
+        boolean successful = booking.getStatus() == Booking.Status.APPROVED
+                || booking.getStatus() == Booking.Status.CONFIRMED;
+        if (successful && !booking.getEndTime().isAfter(now)) {
+            return Booking.Status.COMPLETED;
+        }
+        return booking.getStatus();
+    }
+}

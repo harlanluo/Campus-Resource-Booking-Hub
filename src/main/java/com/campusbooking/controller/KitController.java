@@ -1,16 +1,21 @@
 package com.campusbooking.controller;
 
-import com.campusbooking.dto.BookingResponseDTO;
+import com.campusbooking.dto.AvailabilityResponseDTO;
 import com.campusbooking.dto.KitBookingRequestDTO;
+import com.campusbooking.dto.KitBookingResponseDTO;
 import com.campusbooking.dto.KitResponseDTO;
 import com.campusbooking.service.KitService;
+import com.campusbooking.service.KitBookingService;
+import com.campusbooking.service.AvailabilityService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.format.annotation.DateTimeFormat;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -28,6 +33,8 @@ import java.util.List;
 public class KitController {
 
     private final KitService kitService;
+    private final KitBookingService kitBookingService;
+    private final AvailabilityService availabilityService;
 
     /**
      * Retrieves all project kits configured in the system.
@@ -52,11 +59,20 @@ public class KitController {
         return ResponseEntity.ok(kit);
     }
 
+    /** Returns the intersection of availability for every resource in the kit. */
+    @GetMapping("/{id}/availability")
+    public ResponseEntity<AvailabilityResponseDTO> getAvailability(
+            @PathVariable Long id,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+        return ResponseEntity.ok(availabilityService.getKitAvailability(id, start, end));
+    }
+
     /**
      * Atomically reserves all resources bundled inside the specified kit.
      *
      * <ul>
-     *   <li>{@code 201 Created}     – all items reserved; returns list of {@link BookingResponseDTO}</li>
+     *   <li>{@code 201 Created}     – all items reserved; returns one {@link KitBookingResponseDTO}</li>
      *   <li>{@code 400 Bad Request} – invalid time window (past start, end ≤ start)</li>
      *   <li>{@code 404 Not Found}   – kit or user does not exist</li>
      *   <li>{@code 409 Conflict}    – any single bundled item is in maintenance or already booked</li>
@@ -64,15 +80,15 @@ public class KitController {
      *
      * @param kitId   the ID of the kit to reserve
      * @param request the kit booking request body
-     * @return {@code 201 Created} with the list of created bookings
+     * @return {@code 201 Created} with the parent Kit reservation
      */
     @PostMapping("/{kitId}/book")
     @PreAuthorize("hasRole('ADMIN') or @apiAuthorization.isSelf(#request.userId, authentication)")
-    public ResponseEntity<List<BookingResponseDTO>> bookKit(
+    public ResponseEntity<KitBookingResponseDTO> bookKit(
             @PathVariable Long kitId,
             @Valid @RequestBody KitBookingRequestDTO request) {
 
-        List<BookingResponseDTO> bookings = kitService.bookKit(kitId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(bookings);
+        KitBookingResponseDTO booking = kitBookingService.create(kitId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(booking);
     }
 }

@@ -1,6 +1,7 @@
 package com.campusbooking.service;
 
 import com.campusbooking.model.Booking;
+import com.campusbooking.model.KitBooking;
 import com.campusbooking.model.Resource;
 import com.campusbooking.model.User;
 import com.campusbooking.repository.BookingRepository;
@@ -77,7 +78,17 @@ class BookingReceiptServiceTest {
         assertThatThrownBy(() -> receiptService.generateReceipt(50L))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("409")
-                .hasMessageContaining("APPROVED");
+                .hasMessageContaining("confirmed");
+    }
+
+    @Test
+    @DisplayName("Generates a receipt for a legacy confirmed booking")
+    void confirmedBooking_generatesPdf() {
+        approvedBooking.setStatus(Booking.Status.CONFIRMED);
+        given(bookingRepository.findById(50L)).willReturn(Optional.of(approvedBooking));
+
+        assertThat(receiptService.generateReceipt(50L))
+                .startsWith((byte) '%', (byte) 'P', (byte) 'D', (byte) 'F');
     }
 
     @Test
@@ -88,5 +99,18 @@ class BookingReceiptServiceTest {
         assertThatThrownBy(() -> receiptService.generateReceipt(999L))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
+    }
+
+    @Test
+    @DisplayName("Rejects a direct receipt for a Kit child booking")
+    void kitChildReceipt_isRejected() {
+        approvedBooking.setKitBooking(KitBooking.builder()
+                .id(9L).bookingReference("KIT-2026-000009").build());
+        given(bookingRepository.findById(50L)).willReturn(Optional.of(approvedBooking));
+
+        assertThatThrownBy(() -> receiptService.generateReceipt(50L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("409")
+                .hasMessageContaining("Kit");
     }
 }

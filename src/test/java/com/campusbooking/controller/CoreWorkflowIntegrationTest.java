@@ -46,8 +46,8 @@ class CoreWorkflowIntegrationTest {
     @Autowired private WaitlistRepository waitlistRepository;
 
     @Test
-    @DisplayName("Cancelling through the API promotes the earliest waitlisted user into the released slot")
-    void cancellationPromotesWaitlistThroughApi() throws Exception {
+    @DisplayName("Cancelling through the API creates an exact-slot offer without creating a booking")
+    void cancellationCreatesWaitlistOfferThroughApi() throws Exception {
         String suffix = UUID.randomUUID().toString();
         User owner = saveUser("owner-" + suffix);
         User waiting = saveUser("waiting-" + suffix);
@@ -63,6 +63,8 @@ class CoreWorkflowIntegrationTest {
         waitlistRepository.saveAndFlush(Waitlist.builder()
                 .user(waiting)
                 .resource(resource)
+                .requestedStart(start)
+                .requestedEnd(start.plusHours(1))
                 .requestTime(LocalDateTime.now().minusMinutes(5))
                 .status(Waitlist.Status.WAITING)
                 .build());
@@ -73,19 +75,15 @@ class CoreWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
 
         List<Booking> stored = bookingRepository.findByResourceId(resource.getId());
-        assertThat(stored).hasSize(2);
-        assertThat(stored).filteredOn(item -> item.getStatus() == Booking.Status.PENDING)
-                .singleElement()
-                .extracting(item -> item.getUser().getId(), Booking::getStartTime, Booking::getEndTime)
-                .containsExactly(waiting.getId(), start, start.plusHours(1));
+        assertThat(stored).hasSize(1);
         assertThat(waitlistRepository.findByUserId(waiting.getId()))
                 .singleElement()
                 .extracting(Waitlist::getStatus)
-                .isEqualTo(Waitlist.Status.PROMOTED);
+                .isEqualTo(Waitlist.Status.OFFERED);
     }
 
     @Test
-    @DisplayName("Student issue report and administrator resolution complete through secured APIs")
+    @DisplayName("Student issue report waits for approval before maintenance and can then be resolved")
     void issueLifecycleWorksThroughApi() throws Exception {
         String suffix = UUID.randomUUID().toString();
         User reporter = saveUser("reporter-" + suffix);
@@ -100,9 +98,16 @@ class CoreWorkflowIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.status").value("PENDING"))
                 .andReturn().getResponse().getContentAsString();
         long issueId = objectMapper.readTree(response).get("issueId").asLong();
+        assertThat(resourceRepository.findById(resource.getId()).orElseThrow().getStatus())
+                .isEqualTo(Resource.Status.AVAILABLE);
+
+        mockMvc.perform(put("/api/issues/{id}/approve", issueId)
+                        .with(user("bob_admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"));
         assertThat(resourceRepository.findById(resource.getId()).orElseThrow().getStatus())
                 .isEqualTo(Resource.Status.MAINTENANCE);
 
@@ -112,6 +117,108 @@ class CoreWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
         assertThat(resourceRepository.findById(resource.getId()).orElseThrow().getStatus())
                 .isEqualTo(Resource.Status.AVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Administrator rejection closes a pending issue without changing resource status")
+    void rejectedIssueDoesNotEnterMaintenance() throws Exception {
+        String suffix = UUID.randomUUID().toString();
+        User reporter = saveUser("reject-" + suffix);
+        Resource resource = saveResource("Rejected Issue Resource " + suffix);
+        String body = """
+                {"resourceId":%d,"reporterUserId":%d,"description":"False alarm"}
+                """.formatted(resource.getId(), reporter.getId());
+
+        String response = mockMvc.perform(post("/api/issues")
+                        .with(user(reporter.getUsername()).roles("STUDENT"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andReturn().getResponse().getContentAsString();
+        long issueId = objectMapper.readTree(response).get("issueId").asLong();
+
+        mockMvc.perform(put("/api/issues/{id}/reject", issueId)
+                        .with(user("bob_admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+        assertThat(resourceRepository.findById(resource.getId()).orElseThrow().getStatus())
+                .isEqualTo(Resource.Status.AVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Student and admin booking APIs show only current pending and approved bookings")
+    void bookingDashboardsHideHistoricalAndTerminalBookings() throws Exception {
+        String suffix = UUID.randomUUID().toString();
+        User owner = saveUser("dashboard-" + suffix);
+        Resource resource = saveResource("Dashboard Resource " + suffix);
+        LocalDateTime future = LocalDateTime.now().plusDays(10).withNano(0);
+        LocalDateTime past = LocalDateTime.now().minusDays(10).withNano(0);
+
+        Booking pending = saveBooking(owner, resource, future, Booking.Status.PENDING);
+        Booking approved = saveBooking(owner, resource, future.plusHours(2), Booking.Status.APPROVED);
+        Booking confirmed = saveBooking(owner, resource, future.plusHours(4), Booking.Status.CONFIRMED);
+        Booking cancelled = saveBooking(owner, resource, future.plusHours(6), Booking.Status.CANCELLED);
+        Booking rejected = saveBooking(owner, resource, future.plusHours(8), Booking.Status.REJECTED);
+        Booking completed = saveBooking(owner, resource, future.plusHours(10), Booking.Status.COMPLETED);
+        Booking expired = saveBooking(owner, resource, past, Booking.Status.APPROVED);
+        Booking expiredConfirmed = saveBooking(owner, resource, past.plusHours(2), Booking.Status.CONFIRMED);
+
+        String studentResponse = mockMvc.perform(get("/api/bookings/user/{id}", owner.getId())
+                        .with(user(owner.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String adminResponse = mockMvc.perform(get("/api/bookings")
+                        .with(user("bob_admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String historyResponse = mockMvc.perform(get("/api/bookings/user/{id}/history", owner.getId())
+                        .with(user(owner.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        List<Long> expected = List.of(pending.getId(), approved.getId(), confirmed.getId());
+        List<Long> studentIds = objectMapper.readTree(studentResponse).findValuesAsText("bookingId")
+                .stream().map(Long::valueOf).toList();
+        List<Long> adminIds = objectMapper.readTree(adminResponse).findValuesAsText("bookingId")
+                .stream().map(Long::valueOf).toList();
+
+        assertThat(studentIds).containsExactlyInAnyOrderElementsOf(expected);
+        assertThat(adminIds).containsAll(expected);
+        for (List<Long> ids : List.of(studentIds, adminIds)) {
+            assertThat(ids).doesNotContain(cancelled.getId(), rejected.getId(), completed.getId(),
+                    expired.getId(), expiredConfirmed.getId());
+        }
+
+        var history = objectMapper.readTree(historyResponse);
+        List<Long> historyIds = history.findValuesAsText("bookingId").stream()
+                .map(Long::valueOf).toList();
+        assertThat(historyIds).containsExactlyInAnyOrder(
+                cancelled.getId(), rejected.getId(), completed.getId(), expired.getId(), expiredConfirmed.getId());
+        assertThat(history.findValuesAsText("status")).contains("CANCELLED", "REJECTED", "COMPLETED");
+        history.forEach(item -> {
+            long id = item.get("bookingId").asLong();
+            if (id == expired.getId() || id == expiredConfirmed.getId()) {
+                assertThat(item.get("status").asText()).isEqualTo("COMPLETED");
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("Closed booking transitions return a clear conflict response")
+    void closedBookingCannotBeApprovedOrRejected() throws Exception {
+        String suffix = UUID.randomUUID().toString();
+        User owner = saveUser("closed-" + suffix);
+        Resource resource = saveResource("Closed Resource " + suffix);
+        Booking rejected = saveBooking(owner, resource, LocalDateTime.now().plusDays(12), Booking.Status.REJECTED);
+
+        mockMvc.perform(put("/api/bookings/{id}/approve", rejected.getId())
+                        .with(user("bob_admin").roles("ADMIN")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("REJECTED to APPROVED")));
+        mockMvc.perform(put("/api/bookings/{id}/reject", rejected.getId())
+                        .with(user("bob_admin").roles("ADMIN")))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -170,6 +277,20 @@ class CoreWorkflowIntegrationTest {
                 .name(name)
                 .type("EQUIPMENT")
                 .status(Resource.Status.AVAILABLE)
+                .build());
+    }
+
+    private Booking saveBooking(
+            User owner,
+            Resource resource,
+            LocalDateTime start,
+            Booking.Status status) {
+        return bookingRepository.saveAndFlush(Booking.builder()
+                .user(owner)
+                .resource(resource)
+                .startTime(start)
+                .endTime(start.plusHours(1))
+                .status(status)
                 .build());
     }
 }

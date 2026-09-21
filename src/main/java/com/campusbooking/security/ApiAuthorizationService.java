@@ -3,6 +3,7 @@ package com.campusbooking.security;
 import com.campusbooking.model.Booking;
 import com.campusbooking.model.User;
 import com.campusbooking.repository.BookingRepository;
+import com.campusbooking.repository.KitBookingRepository;
 import com.campusbooking.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -17,6 +18,7 @@ public class ApiAuthorizationService {
 
     private final UserRepository userRepository;
     private final BookingRepository bookingRepository;
+    private final KitBookingRepository kitBookingRepository;
 
     public boolean isSelf(Long requestedUserId, Authentication authentication) {
         if (requestedUserId == null || !isAuthenticated(authentication)) {
@@ -39,6 +41,34 @@ public class ApiAuthorizationService {
         return userRepository.findByUsername(authentication.getName())
                 .flatMap(user -> bookingRepository.findById(bookingId)
                         .filter(booking -> isParticipant(booking, user.getId())))
+                .isPresent();
+    }
+
+    public boolean canViewKitBooking(Long kitBookingId, Authentication authentication) {
+        if (kitBookingId == null || !isAuthenticated(authentication)) {
+            return false;
+        }
+        if (hasAdminRole(authentication)) {
+            return true;
+        }
+        return userRepository.findByUsername(authentication.getName())
+                .flatMap(user -> kitBookingRepository.findById(kitBookingId)
+                        .filter(booking -> user.getId().equals(booking.getUser().getId())
+                                || booking.getGroupMembers().stream()
+                                    .anyMatch(member -> user.getId().equals(member.getId()))))
+                .isPresent();
+    }
+
+    public boolean canManageKitBooking(Long kitBookingId, Authentication authentication) {
+        if (kitBookingId == null || !isAuthenticated(authentication)) {
+            return false;
+        }
+        if (hasAdminRole(authentication)) {
+            return true;
+        }
+        return userRepository.findByUsername(authentication.getName())
+                .flatMap(user -> kitBookingRepository.findById(kitBookingId)
+                        .filter(booking -> user.getId().equals(booking.getUser().getId())))
                 .isPresent();
     }
 

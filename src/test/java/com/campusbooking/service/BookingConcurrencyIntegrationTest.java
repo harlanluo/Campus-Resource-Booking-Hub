@@ -1,21 +1,24 @@
 package com.campusbooking.service;
 
 import com.campusbooking.dto.BookingRequestDTO;
-import com.campusbooking.dto.BookingResponseDTO;
+import com.campusbooking.dto.KitBookingResponseDTO;
 import com.campusbooking.dto.KitBookingRequestDTO;
 import com.campusbooking.exception.BookingConflictException;
 import com.campusbooking.model.Booking;
 import com.campusbooking.model.Kit;
+import com.campusbooking.model.KitBooking;
 import com.campusbooking.model.Resource;
 import com.campusbooking.model.User;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.KitRepository;
+import com.campusbooking.repository.KitBookingRepository;
 import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -36,11 +39,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BookingConcurrencyIntegrationTest {
 
     @Autowired private BookingService bookingService;
-    @Autowired private KitService kitService;
+    @Autowired private KitBookingService kitBookingService;
     @Autowired private BookingRepository bookingRepository;
     @Autowired private ResourceRepository resourceRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private KitRepository kitRepository;
+    @Autowired private KitBookingRepository kitBookingRepository;
 
     @RepeatedTest(5)
     @DisplayName("Simultaneous overlapping bookings produce one winner and no duplicate active slot")
@@ -92,9 +96,9 @@ class BookingConcurrencyIntegrationTest {
         for (User user : users) {
             attempts.add(() -> {
                 try {
-                    List<BookingResponseDTO> saved = kitService.bookKit(
+                    KitBookingResponseDTO saved = kitBookingService.create(
                             kit.getId(), kitRequest(user.getId(), start));
-                    return saved.size();
+                    return saved.getResourceCount();
                 } catch (BookingConflictException expected) {
                     return 0;
                 }
@@ -112,6 +116,101 @@ class BookingConcurrencyIntegrationTest {
                 .containsExactlyInAnyOrderElementsOf(resources.stream().map(Resource::getId).toList());
         assertThat(kitBookings).extracting(booking -> booking.getUser().getId()).containsOnly(
                 kitBookings.get(0).getUser().getId());
+        assertThat(kitBookings).allMatch(booking -> booking.getKitBooking() != null);
+        assertThat(kitBookings).extracting(booking -> booking.getKitBooking().getId())
+                .containsOnly(kitBookings.get(0).getKitBooking().getId());
+    }
+
+    @RepeatedTest(5)
+    @DisplayName("A Project Kit and single-resource request cannot both win the same slot")
+    void kitVsSingleResourceRaceHasOneCompleteWinner() throws Exception {
+        String suffix = UUID.randomUUID().toString();
+        Resource shared = saveResource("Shared Camera " + suffix);
+        Resource second = saveResource("Shared Tripod " + suffix);
+        Resource third = saveResource("Shared Mic " + suffix);
+        Kit kit = kitRepository.save(Kit.builder()
+                .name("Mixed Race Kit " + suffix)
+                .description("Kit versus standalone race")
+                .resources(new HashSet<>(List.of(shared, second, third)))
+                .build());
+        List<User> users = saveUsers("mixed-" + suffix, 2);
+        LocalDateTime start = LocalDateTime.now().plusDays(15).withNano(0);
+
+        List<Callable<Integer>> attempts = List.of(
+                () -> {
+                    try {
+                        return kitBookingService.create(
+                                kit.getId(), kitRequest(users.get(0).getId(), start)).getResourceCount();
+                    } catch (BookingConflictException expected) {
+                        return 0;
+                    }
+                },
+                () -> {
+                    try {
+                        bookingService.createBooking(
+                                bookingRequest(users.get(1).getId(), shared.getId(), start));
+                        return 1;
+                    } catch (BookingConflictException expected) {
+                        return 0;
+                    }
+                });
+
+        List<Integer> results = runTogether(attempts);
+        assertThat(results).contains(0);
+        assertThat(results.stream().filter(value -> value > 0).count()).isEqualTo(1);
+        assertThat(results.stream().mapToInt(Integer::intValue).sum()).isIn(1, 3);
+
+        List<Booking> sharedBookings = bookingRepository.findByResourceId(shared.getId());
+        assertThat(sharedBookings).hasSize(1);
+        long totalForRace = List.of(shared, second, third).stream()
+                .flatMap(resource -> bookingRepository.findByResourceId(resource.getId()).stream())
+                .count();
+        assertThat(totalForRace).isIn(1L, 3L);
+    }
+
+    @RepeatedTest(5)
+    @DisplayName("Reject and cancel races leave one uniform terminal Kit aggregate")
+    void lifecycleRaceLeavesOneConsistentTerminalState() throws Exception {
+        String suffix = UUID.randomUUID().toString();
+        List<Resource> resources = List.of(
+                saveResource("Lifecycle Camera " + suffix),
+                saveResource("Lifecycle Mic " + suffix));
+        Kit kit = kitRepository.save(Kit.builder()
+                .name("Lifecycle Kit " + suffix)
+                .resources(new HashSet<>(resources))
+                .build());
+        User owner = saveUsers("lifecycle-" + suffix, 1).get(0);
+        LocalDateTime start = LocalDateTime.now().plusDays(18).withNano(0);
+        Long parentId = kitBookingService.create(
+                kit.getId(), kitRequest(owner.getId(), start)).getId();
+
+        List<Callable<Integer>> attempts = List.of(
+                () -> {
+                    try {
+                        kitBookingService.reject(parentId);
+                        return 1;
+                    } catch (ResponseStatusException expected) {
+                        return 0;
+                    }
+                },
+                () -> {
+                    try {
+                        kitBookingService.cancel(parentId);
+                        return 1;
+                    } catch (ResponseStatusException expected) {
+                        return 0;
+                    }
+                });
+
+        assertThat(runTogether(attempts)).containsExactlyInAnyOrder(1, 0);
+        KitBooking parent = kitBookingRepository.findById(parentId).orElseThrow();
+        List<Booking> children = bookingRepository.findByKitBookingIdOrderByResourceId(parentId);
+        if (parent.getStatus() == KitBooking.Status.REJECTED) {
+            assertThat(children).allMatch(child -> child.getStatus() == Booking.Status.REJECTED);
+        } else {
+            assertThat(parent.getStatus()).isEqualTo(KitBooking.Status.CANCELLED);
+            assertThat(children).allMatch(child -> child.getStatus() == Booking.Status.CANCELLED);
+        }
     }
 
     private Resource saveResource(String name) {

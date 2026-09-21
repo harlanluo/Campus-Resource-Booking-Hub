@@ -6,10 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * Represents a waitlist entry for a fully-booked resource.
- * Maps to the {@code waitlists} table in schema.sql.
- */
+/** A student's request for one exact resource and time interval. */
 @Entity
 @Table(name = "waitlists")
 @Data
@@ -32,6 +29,12 @@ public class Waitlist {
     @JoinColumn(name = "resource_id", nullable = false)
     private Resource resource;
 
+    @Column(name = "requested_start", nullable = false)
+    private LocalDateTime requestedStart;
+
+    @Column(name = "requested_end", nullable = false)
+    private LocalDateTime requestedEnd;
+
     /**
      * Timestamp when the waitlist request was submitted.
      * Defaults to the current timestamp, matching the SQL DEFAULT CURRENT_TIMESTAMP.
@@ -49,7 +52,16 @@ public class Waitlist {
     @Builder.Default
     private Status status = Status.WAITING;
 
+    @Column(name = "offered_at")
+    private LocalDateTime offeredAt;
+
+    @Column(name = "offer_expires_at")
+    private LocalDateTime offerExpiresAt;
+
+    @Column(name = "closed_at")
+    private LocalDateTime closedAt;
+
     public enum Status {
-        WAITING, PROMOTED, CANCELLED
+        WAITING, OFFERED, ACCEPTED, DECLINED, EXPIRED, LEFT
     }
 }

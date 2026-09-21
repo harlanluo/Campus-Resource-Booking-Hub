@@ -69,7 +69,7 @@ public class BookingController {
     }
 
     /**
-     * Retrieves all bookings across all users (Admin overview).
+     * Retrieves current/future pending and approved bookings (Admin queue).
      *
      * @return {@code 200 OK} with a list of all {@link BookingResponseDTO}
      */
@@ -80,8 +80,16 @@ public class BookingController {
         return ResponseEntity.ok(bookings);
     }
 
+    /** Retrieves closed and expired bookings for administrative review. */
+    @GetMapping("/history")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<BookingResponseDTO>> getBookingHistory() {
+        return ResponseEntity.ok(bookingService.getBookingHistory());
+    }
+
     /**
-     * Retrieves all bookings made by a specific user.
+     * Retrieves current/future pending and approved bookings owned by or shared
+     * with a specific user.
      *
      * <ul>
      *   <li>{@code 200 OK}        – returns list of the user's bookings (may be empty)</li>
@@ -98,6 +106,14 @@ public class BookingController {
 
         List<BookingResponseDTO> bookings = bookingService.getUserBookings(userId);
         return ResponseEntity.ok(bookings);
+    }
+
+    /** Retrieves a user's closed and expired booking history. */
+    @GetMapping("/user/{userId}/history")
+    @PreAuthorize("hasRole('ADMIN') or @apiAuthorization.isSelf(#userId, authentication)")
+    public ResponseEntity<List<BookingResponseDTO>> getUserBookingHistory(
+            @PathVariable Long userId) {
+        return ResponseEntity.ok(bookingService.getUserBookingHistory(userId));
     }
 
     /** Downloads a PDF receipt for an approved booking. */
@@ -125,7 +141,7 @@ public class BookingController {
      *   <li>{@code 404 Not Found}    – booking with the given ID does not exist</li>
      * </ul>
      *
-     * <p>Automatically triggers waitlist promotion for the freed resource slot.</p>
+     * <p>Creates a temporary exact-slot offer for the next eligible student.</p>
      *
      * @param bookingId the ID of the booking to cancel
      * @return {@code 200 OK} with the updated booking reflecting {@code CANCELLED} status

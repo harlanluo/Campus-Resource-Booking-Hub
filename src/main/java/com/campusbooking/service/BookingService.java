@@ -6,11 +6,9 @@ import com.campusbooking.exception.BookingConflictException;
 import com.campusbooking.model.Booking;
 import com.campusbooking.model.Resource;
 import com.campusbooking.model.User;
-import com.campusbooking.model.Waitlist;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
-import com.campusbooking.repository.WaitlistRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -36,11 +34,9 @@ import java.util.List;
  * thrown immediately. The row lock keeps this check-and-insert sequence safe
  * when requests for the same resource arrive concurrently.
  *
- * <h3>Waitlist auto-trigger</h3>
- * When {@link #cancelBooking(Long)} cancels a booking, the service
- * automatically checks the waitlist for that resource. If any {@code WAITING}
- * entries exist, the earliest student receives a new PENDING booking for the
- * exact released time slot and the queue entry becomes {@code PROMOTED}.
+ * <h3>Waitlist release integration</h3>
+ * Cancellation and rejection offer the exact released slot to the first
+ * eligible waiting student. A booking is created only after acceptance.
  */
 @Slf4j
 @Service
@@ -51,7 +47,7 @@ public class BookingService {
     private final BookingRepository   bookingRepository;
     private final ResourceRepository  resourceRepository;
     private final UserRepository      userRepository;
-    private final WaitlistRepository  waitlistRepository;
+    private final WaitlistService     waitlistService;
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -112,6 +108,8 @@ public class BookingService {
                     "endTime must be strictly after startTime.");
         }
 
+        waitlistService.processExpiredOffersForResource(resource.getId(), now);
+
         // 6. Overlap / conflict check ─────────────────────────────────────────
         List<Booking> conflicts = bookingRepository.findOverlappingBookings(
                 resource.getId(),
@@ -121,6 +119,11 @@ public class BookingService {
         if (!conflicts.isEmpty()) {
             throw new BookingConflictException(
                     "Resource is already booked during this time slot");
+        }
+        if (waitlistService.hasActiveOfferConflict(
+                resource.getId(), request.getStartTime(), request.getEndTime(), now)) {
+            throw new BookingConflictException(
+                    "Resource is temporarily held for an active slot offer");
         }
 
         // 7. Resolve group members (if any) ──────────────────────────────────
@@ -180,22 +183,48 @@ public class BookingService {
                     "User not found with id: " + userId);
         }
 
-        return bookingRepository.findAllUserBookings(userId)
+        LocalDateTime now = LocalDateTime.now();
+        return bookingRepository.findActiveUserBookings(userId, now)
                 .stream()
-                .map(BookingResponseDTO::from)
+                .map(booking -> BookingResponseDTO.from(booking, now))
+                .toList();
+    }
+
+    /** Returns closed and expired bookings owned by or shared with a user. */
+    public List<BookingResponseDTO> getUserBookingHistory(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "User not found with id: " + userId);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        return bookingRepository.findHistoryUserBookings(userId, now)
+                .stream()
+                .map(booking -> BookingResponseDTO.from(booking, now))
                 .toList();
     }
 
 
     /**
-     * Returns all bookings in the system regardless of user (for Admin overview).
+     * Returns current/future pending and approved bookings for the Admin queue.
      *
      * @return list of all bookings as DTOs
      */
     public List<BookingResponseDTO> getAllBookings() {
-        return bookingRepository.findAll()
+        LocalDateTime now = LocalDateTime.now();
+        return bookingRepository.findActiveAdminBookings(now)
                 .stream()
-                .map(BookingResponseDTO::from)
+                .map(booking -> BookingResponseDTO.from(booking, now))
+                .toList();
+    }
+
+    /** Returns closed and expired bookings for administrators. */
+    public List<BookingResponseDTO> getBookingHistory() {
+        LocalDateTime now = LocalDateTime.now();
+        return bookingRepository.findHistoryAdminBookings(now)
+                .stream()
+                .map(booking -> BookingResponseDTO.from(booking, now))
                 .toList();
     }
 
@@ -209,10 +238,9 @@ public class BookingService {
      * cancelled; attempting to cancel a {@code COMPLETED} or already-{@code CANCELLED}
      * booking returns a {@code 400 BAD REQUEST}.</p>
      *
-     * <h4>Waitlist auto-trigger</h4>
-     * After cancellation, the service queries the waitlist for the freed resource.
-     * If one or more {@code WAITING} entries exist, the earliest entry receives
-     * a PENDING booking for this exact slot and is marked {@code PROMOTED}.
+     * After cancellation, waiting requests affected by the released interval
+     * are rechecked against current bookings and temporary offers. Eligible
+     * requests receive an offer without creating a booking.
      *
      * @param bookingId the ID of the booking to cancel
      * @return the updated {@link BookingResponseDTO} reflecting the new status
@@ -225,29 +253,30 @@ public class BookingService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Booking not found with id: " + bookingId));
+        rejectKitChildAction(booking);
 
-        if (booking.getStatus() == Booking.Status.CANCELLED) {
+        LocalDateTime now = LocalDateTime.now();
+        if (isEffectivelyCompleted(booking, now)) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Booking " + bookingId + " is already cancelled.");
-        }
-        if (booking.getStatus() == Booking.Status.COMPLETED) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
+                    HttpStatus.CONFLICT,
                     "Completed bookings cannot be cancelled.");
         }
-
-        boolean releasedBlockingSlot = booking.getStatus() == Booking.Status.PENDING
-                || booking.getStatus() == Booking.Status.CONFIRMED
-                || booking.getStatus() == Booking.Status.APPROVED;
+        if (!isCancellableStatus(booking.getStatus())) {
+            throw invalidTransition(booking, Booking.Status.CANCELLED);
+        }
+        if (!booking.getStartTime().isAfter(now)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Bookings cannot be cancelled after the reservation has started.");
+        }
 
         booking.setStatus(Booking.Status.CANCELLED);
         Booking updated = bookingRepository.save(booking);
+        bookingRepository.flush();
 
         // ── Waitlist auto-trigger ─────────────────────────────────────────────
-        if (releasedBlockingSlot) {
-            triggerWaitlistPromotion(booking);
-        }
+        waitlistService.offerReleasedSlot(
+                booking.getResource(), booking.getStartTime(), booking.getEndTime());
 
         return BookingResponseDTO.from(updated);
     }
@@ -271,16 +300,21 @@ public class BookingService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Booking not found with id: " + bookingId));
+        rejectKitChildAction(booking);
 
-        if (booking.getStatus() == Booking.Status.CANCELLED) {
+        LocalDateTime now = LocalDateTime.now();
+        if (isEffectivelyCompleted(booking, now)) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Cannot approve a cancelled booking.");
+                    HttpStatus.CONFLICT,
+                    "Completed bookings cannot be approved.");
         }
-        if (booking.getStatus() == Booking.Status.COMPLETED) {
+        if (!booking.getEndTime().isAfter(now)) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Cannot approve a completed booking.");
+                    HttpStatus.CONFLICT,
+                    "Expired booking requests cannot be approved.");
+        }
+        if (booking.getStatus() != Booking.Status.PENDING) {
+            throw invalidTransition(booking, Booking.Status.APPROVED);
         }
 
         booking.setStatus(Booking.Status.APPROVED);
@@ -306,56 +340,64 @@ public class BookingService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Booking not found with id: " + bookingId));
+        rejectKitChildAction(booking);
 
-        if (booking.getStatus() == Booking.Status.CANCELLED) {
+        LocalDateTime now = LocalDateTime.now();
+        if (isEffectivelyCompleted(booking, now)) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Cannot reject a cancelled booking.");
+                    HttpStatus.CONFLICT,
+                    "Completed bookings cannot be rejected.");
         }
-        if (booking.getStatus() == Booking.Status.COMPLETED) {
+        if (!booking.getEndTime().isAfter(now)) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Cannot reject a completed booking.");
+                    HttpStatus.CONFLICT,
+                    "Expired booking requests cannot be rejected.");
+        }
+        if (booking.getStatus() != Booking.Status.PENDING) {
+            throw invalidTransition(booking, Booking.Status.REJECTED);
         }
 
         booking.setStatus(Booking.Status.REJECTED);
         Booking updated = bookingRepository.save(booking);
+        bookingRepository.flush();
+        waitlistService.offerReleasedSlot(
+                booking.getResource(), booking.getStartTime(), booking.getEndTime());
         log.info("[Admin] Booking {} rejected.", bookingId);
         return BookingResponseDTO.from(updated);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    /**
-     * Assigns the exact released slot to the earliest waiting student, then
-     * marks that queue entry as promoted.
-     *
-     * <p>Called automatically after a booking is cancelled, freeing up a slot
-     * that a waitlisted user may now claim.</p>
-     *
-     * @param releasedBooking the cancelled booking whose slot became available
-     */
-    private void triggerWaitlistPromotion(Booking releasedBooking) {
-        Long resourceId = releasedBooking.getResource().getId();
-        List<Waitlist> queue = waitlistRepository
-                .findByResourceIdAndStatusOrderByRequestTimeAsc(resourceId, Waitlist.Status.WAITING);
+    private boolean isEffectivelyCompleted(Booking booking, LocalDateTime now) {
+        if (booking.getStatus() == Booking.Status.COMPLETED) {
+            return true;
+        }
+        boolean successful = booking.getStatus() == Booking.Status.APPROVED
+                || booking.getStatus() == Booking.Status.CONFIRMED;
+        return successful && !booking.getEndTime().isAfter(now);
+    }
 
-        if (!queue.isEmpty()) {
-            Waitlist next = queue.get(0);
-
-            Booking promotedBooking = Booking.builder()
-                    .user(next.getUser())
-                    .resource(releasedBooking.getResource())
-                    .startTime(releasedBooking.getStartTime())
-                    .endTime(releasedBooking.getEndTime())
-                    .status(Booking.Status.PENDING)
-                    .build();
-            Booking savedPromotion = bookingRepository.save(promotedBooking);
-
-            next.setStatus(Waitlist.Status.PROMOTED);
-            waitlistRepository.save(next);
-            log.info("[Waitlist Auto-Trigger] User {} received booking {} for released slot on resource {}.",
-                    next.getUser().getId(), savedPromotion.getId(), resourceId);
+    private void rejectKitChildAction(Booking booking) {
+        if (booking.getKitBooking() != null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "This booking belongs to Kit reservation "
+                            + booking.getKitBooking().getBookingReference()
+                            + "; use the parent Kit booking endpoint.");
         }
     }
+
+    private boolean isCancellableStatus(Booking.Status status) {
+        return status == Booking.Status.PENDING
+                || status == Booking.Status.APPROVED
+                || status == Booking.Status.CONFIRMED;
+    }
+
+    private ResponseStatusException invalidTransition(Booking booking, Booking.Status target) {
+        return new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Cannot change booking " + booking.getId() + " from "
+                        + booking.getStatus() + " to " + target + ".");
+    }
+
 }

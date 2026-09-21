@@ -2,6 +2,8 @@ package com.campusbooking.service;
 
 import com.campusbooking.model.Resource;
 import com.campusbooking.repository.ResourceRepository;
+import com.campusbooking.repository.BookingRepository;
+import com.campusbooking.repository.KitRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,8 @@ import java.util.List;
 public class ResourceService {
 
     private final ResourceRepository resourceRepository;
+    private final BookingRepository bookingRepository;
+    private final KitRepository kitRepository;
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -103,6 +107,16 @@ public class ResourceService {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "Resource not found with id: " + id);
+        }
+        if (kitRepository.existsContainingResource(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Resource cannot be deleted while it belongs to a Project Kit.");
+        }
+        if (bookingRepository.existsByResourceId(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Resource cannot be deleted because booking history exists.");
         }
         resourceRepository.deleteById(id);
     }

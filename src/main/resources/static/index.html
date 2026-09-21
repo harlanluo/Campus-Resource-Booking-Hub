@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=9.4" />
 </head>
 <body>
   <!-- App Shell -->
@@ -153,7 +153,7 @@
           </div>
         </div>
 
-        <!-- Auto-trigger explanation card -->
+        <!-- Exact-slot offer explanation -->
         <div class="info-callout">
           <div class="callout-icon">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -163,13 +163,24 @@
             </svg>
           </div>
           <div class="callout-content">
-            <strong>Automated Waitlist Promotion:</strong> When an active booking is cancelled, the next student in the queue receives a new <code>PENDING</code> booking for that exact released time slot, and their waitlist entry changes to <code>PROMOTED</code>.
+            <strong>Exact-slot offers:</strong> Join only for a time you selected. If that same time opens, you will receive a private 15-minute offer to accept or decline. A booking request is created only after you accept.
           </div>
         </div>
 
-        <!-- Section: Active Bookings -->
+        <!-- Section: Upcoming and booking history -->
         <div class="section-container">
-          <div class="section-title-bar">
+          <div class="booking-view-header">
+            <div class="booking-view-tabs" role="tablist" aria-label="Booking views">
+              <button class="booking-view-tab active" id="upcomingBookingsTab" type="button" role="tab" aria-selected="true" data-booking-view="UPCOMING">
+                Upcoming <span id="upcomingBookingsCount">0</span>
+              </button>
+              <button class="booking-view-tab" id="historyBookingsTab" type="button" role="tab" aria-selected="false" data-booking-view="HISTORY">
+                Booking History <span id="historyBookingsCount">0</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="section-title-bar booking-view-title-bar">
             <h2 class="section-title">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -177,15 +188,17 @@
                 <line x1="16" y1="13" x2="8" y2="13"/>
                 <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
-              <span>My Booking Reservations</span>
+              <span id="bookingViewTitle">Upcoming Reservations</span>
             </h2>
-            <span class="count-badge" id="bookingsCountBadge">0 Bookings</span>
+            <span class="count-badge" id="bookingsCountBadge">0 Upcoming</span>
           </div>
 
-          <div class="bookings-list" id="myBookingsList">
+          <p class="booking-view-description" id="bookingViewDescription">Bookings that still need approval or are confirmed for a future time.</p>
+
+          <div class="bookings-list" id="myBookingsList" role="tabpanel" aria-live="polite">
             <!-- Populated dynamically via app.js -->
             <div class="empty-state">
-              <p>No bookings found for the selected user.</p>
+              <p>Loading your reservations...</p>
             </div>
           </div>
         </div>
@@ -198,7 +211,7 @@
                 <circle cx="12" cy="12" r="10"/>
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
-              <span>My Active Waitlist Positions</span>
+              <span>My Waitlist Activity &amp; Offers</span>
             </h2>
             <span class="count-badge" id="waitlistCountBadge">0 Waitlisted</span>
           </div>
@@ -261,7 +274,7 @@
             <div class="stat-icon">⚠️</div>
             <div class="stat-info">
               <span class="stat-number" id="statOpenIssues">0</span>
-              <span class="stat-title">Open Issues</span>
+              <span class="stat-title">Actionable Issues</span>
             </div>
           </div>
         </div>
@@ -280,8 +293,7 @@
               </h2>
             </div>
             <div class="admin-filter-pills">
-              <button class="pill-btn active" data-admin-filter="ALL">All (<span id="countAllAdminBookings">0</span>)</button>
-              <button class="pill-btn warning" data-admin-filter="PENDING">Pending (<span id="countPendingAdminBookings">0</span>)</button>
+              <button class="pill-btn warning active" data-admin-filter="PENDING">Pending (<span id="countPendingAdminBookings">0</span>)</button>
               <button class="pill-btn success" data-admin-filter="APPROVED">Approved (<span id="countApprovedAdminBookings">0</span>)</button>
             </div>
           </div>
@@ -290,9 +302,9 @@
             <table class="admin-table" id="adminBookingsTable">
               <thead>
                 <tr>
-                  <th>Booking ID</th>
+                  <th>Reference</th>
                   <th>User</th>
-                  <th>Resource</th>
+                  <th>Reservation</th>
                   <th>Reserved Time Window</th>
                   <th>Status</th>
                   <th style="text-align: right;">Admin Action</th>
@@ -305,7 +317,36 @@
           </div>
         </div>
 
-        <!-- Section 2: Resource Inventory Management -->
+        <!-- Section 2: Read-only Waitlist Operations Overview -->
+        <div class="section-container" style="margin-top: 2.5rem;">
+          <div class="section-title-bar">
+            <h2 class="section-title">
+              <span>⏱️</span>
+              <span>Waitlist Activity</span>
+            </h2>
+            <span class="count-badge" id="adminWaitlistCountBadge">0 Active Slots</span>
+          </div>
+          <p class="booking-view-description">Read-only exact-slot queue and offer status. Student identities remain private.</p>
+
+          <div class="table-responsive">
+            <table class="admin-table" id="adminWaitlistTable">
+              <thead>
+                <tr>
+                  <th>Resource</th>
+                  <th>Requested Slot</th>
+                  <th>Waiting</th>
+                  <th>Offer Status</th>
+                  <th>Offer Expires</th>
+                </tr>
+              </thead>
+              <tbody id="adminWaitlistTbody">
+                <tr><td colspan="5" style="text-align: center; padding: 1.5rem;">Loading waitlist activity...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 3: Resource Inventory Management -->
         <div class="section-container" style="margin-top: 2.5rem;">
           <div class="section-title-bar">
             <h2 class="section-title">
@@ -335,7 +376,7 @@
           </div>
         </div>
 
-        <!-- Section 3: Reported Resource Issues -->
+        <!-- Section 4: Reported Resource Issues -->
         <div class="section-container" style="margin-top: 2.5rem;">
           <div class="section-title-bar">
             <h2 class="section-title">
@@ -383,7 +424,7 @@
 
   <!-- MODAL: BOOK RESOURCE -->
   <div class="modal-backdrop" id="bookingModalBackdrop" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalBookingTitle">
+    <div class="modal-card booking-experience-modal" role="dialog" aria-modal="true" aria-labelledby="modalBookingTitle">
       <div class="modal-header">
         <div class="modal-title-group">
           <div class="modal-icon-badge" id="modalResourceIcon">🏛️</div>
@@ -403,7 +444,7 @@
           <p class="conflict-text" id="conflictMessage">This resource is already booked for the selected period.</p>
           <div class="conflict-action">
             <button class="btn btn-warning-action" id="joinWaitlistFromConflictBtn">
-              <span>⏳ Join Waitlist Queue for this Resource</span>
+              <span>Join waitlist for this exact time</span>
             </button>
           </div>
         </div>
@@ -422,26 +463,72 @@
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label for="bookingStartTime">Start Time <span class="required">*</span></label>
-            <input type="datetime-local" id="bookingStartTime" required />
+        <section class="booking-resource-overview" aria-label="Resource information">
+          <div>
+            <span class="resource-detail-label">About this resource</span>
+            <p id="modalResourceDescription">Resource details will appear here.</p>
           </div>
-          <div class="form-group">
-            <label for="bookingEndTime">End Time <span class="required">*</span></label>
-            <input type="datetime-local" id="bookingEndTime" required />
-          </div>
-        </div>
+          <span class="status-badge AVAILABLE" id="modalOperationalStatus">
+            <span class="dot"></span>
+            <span>Operational</span>
+          </span>
+        </section>
 
-        <!-- Quick Presets -->
-        <div class="presets-section">
-          <span class="preset-label">Quick Presets:</span>
-          <div class="preset-buttons">
-            <button type="button" class="preset-btn" id="presetTomorrowMorning">Tomorrow 9am - 11am</button>
-            <button type="button" class="preset-btn" id="presetTomorrowAfternoon">Tomorrow 2pm - 4pm</button>
-            <button type="button" class="preset-btn" id="presetNextDay">Next Day 10am - 12pm</button>
+        <section class="availability-section" aria-labelledby="availabilityHeading">
+          <div class="availability-heading-row">
+            <div>
+              <span class="step-kicker">Step 1</span>
+              <h4 id="availabilityHeading">Choose an available time</h4>
+              <p>Click one slot for 30 minutes, then a later free slot to extend the booking.</p>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="clearSlotSelectionBtn">Clear selection</button>
           </div>
-        </div>
+
+          <div class="schedule-toolbar">
+            <button type="button" class="schedule-nav-btn" id="previousWeekBtn" aria-label="Previous week">← Previous</button>
+            <div class="schedule-week-label" id="scheduleWeekLabel">Loading week…</div>
+            <div class="schedule-nav-actions">
+              <button type="button" class="schedule-nav-btn" id="currentWeekBtn">Current week</button>
+              <button type="button" class="schedule-nav-btn" id="nextWeekBtn" aria-label="Next week">Next →</button>
+            </div>
+          </div>
+
+          <div class="schedule-legend" aria-label="Schedule legend">
+            <span><i class="legend-swatch available"></i>Available</span>
+            <span><i class="legend-swatch selected"></i>Selected</span>
+            <span><i class="legend-swatch booked"></i>Booked</span>
+            <span><i class="legend-swatch pending"></i>Pending</span>
+            <span><i class="legend-swatch held"></i>Temporarily held</span>
+            <span><i class="legend-swatch maintenance"></i>Maintenance / unavailable</span>
+          </div>
+
+          <div class="mobile-day-selector" id="mobileDaySelector" aria-label="Select schedule day"></div>
+          <div class="schedule-state" id="scheduleState" role="status">Loading availability…</div>
+          <div class="schedule-days-grid" id="scheduleDaysGrid" aria-label="Resource availability schedule"></div>
+        </section>
+
+        <details class="advanced-time-panel" id="advancedTimePanel">
+          <summary>Advanced / Custom time</summary>
+          <div class="form-row advanced-time-fields">
+            <div class="form-group">
+              <label for="bookingStartTime">Start Time <span class="required">*</span></label>
+              <input type="datetime-local" id="bookingStartTime" required />
+            </div>
+            <div class="form-group">
+              <label for="bookingEndTime">End Time <span class="required">*</span></label>
+              <input type="datetime-local" id="bookingEndTime" required />
+            </div>
+          </div>
+
+          <div class="presets-section">
+            <span class="preset-label">Quick Presets:</span>
+            <div class="preset-buttons">
+              <button type="button" class="preset-btn" id="presetTomorrowMorning">Tomorrow 9am - 11am</button>
+              <button type="button" class="preset-btn" id="presetTomorrowAfternoon">Tomorrow 2pm - 4pm</button>
+              <button type="button" class="preset-btn" id="presetNextDay">Next Day 10am - 12pm</button>
+            </div>
+          </div>
+        </details>
 
         <!-- Collaborative Group Members Section -->
         <div class="form-group group-members-section">
@@ -459,14 +546,27 @@
         </div>
 
         <div class="booking-summary-box">
+          <div class="summary-heading">
+            <span class="step-kicker">Step 2</span>
+            <strong>Review your booking</strong>
+          </div>
+          <div class="summary-line">
+            <span>Date:</span>
+            <strong id="modalSelectedDate">Choose a slot</strong>
+          </div>
+          <div class="summary-line">
+            <span>Time:</span>
+            <strong id="modalSelectedTime">—</strong>
+          </div>
           <div class="summary-line">
             <span>Booking User:</span>
             <strong id="modalUserName">Alice Student (ID: 1)</strong>
           </div>
           <div class="summary-line">
             <span>Estimated Duration:</span>
-            <strong id="modalDurationPreview">2 hours</strong>
+            <strong id="modalDurationPreview">—</strong>
           </div>
+          <p class="selection-validation" id="selectionValidation">Select a green time slot to continue.</p>
         </div>
 
         <div class="modal-footer">
@@ -535,36 +635,6 @@
     </div>
   </div>
 
-  <!-- MODAL: WAITLIST QUEUE VIEWER -->
-  <div class="modal-backdrop" id="waitlistQueueModalBackdrop" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalQueueTitle">
-      <div class="modal-header">
-        <div class="modal-title-group">
-          <div class="modal-icon-badge">📋</div>
-          <div>
-            <h3 class="modal-title" id="modalQueueTitle">Resource Waitlist Queue</h3>
-            <span class="modal-subtitle" id="modalQueueSubtitle">Real-time FIFO waitlist order</span>
-          </div>
-        </div>
-        <button class="modal-close-btn" id="closeQueueModalBtn" aria-label="Close modal">&times;</button>
-      </div>
-
-      <div class="queue-content">
-        <div class="queue-list" id="resourceQueueList">
-          <!-- Populated dynamically via app.js -->
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="joinWaitlistDirectBtn">
-          <span>+ Join This Queue</span>
-        </button>
-        <button type="button" class="btn btn-ghost" id="closeQueueModalBottomBtn">Close</button>
-      </div>
-    </div>
-  </div>
-
-
   <!-- MODAL: REPORT RESOURCE ISSUE -->
   <div class="modal-backdrop" id="issueModalBackdrop" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalIssueTitle">
@@ -585,7 +655,7 @@
           <label for="issueDescription">Issue Description <span class="required">*</span></label>
           <textarea id="issueDescription" rows="4" maxlength="500" required
                     placeholder="Briefly describe what is broken, unsafe, or not working..."></textarea>
-          <span class="form-help-text">The resource will be placed in maintenance while the issue is open.</span>
+          <span class="form-help-text">An administrator will review this report before the resource is placed in maintenance.</span>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" id="cancelIssueModalBtn">Cancel</button>
@@ -599,6 +669,6 @@
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <!-- Main JavaScript Bundle -->
-  <script src="app.js"></script>
+  <script src="app.js?v=9.4"></script>
 </body>
 </html>
