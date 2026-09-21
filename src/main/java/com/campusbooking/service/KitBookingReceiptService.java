@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /** Generates the single product-level PDF receipt for a Project Kit reservation. */
 @Service
@@ -31,7 +32,7 @@ import java.util.List;
 public class KitBookingReceiptService {
 
     private static final DateTimeFormatter DATE_TIME_FORMAT =
-            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm");
+            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm", Locale.ROOT);
 
     private final KitBookingRepository kitBookingRepository;
     private final BookingRepository bookingRepository;

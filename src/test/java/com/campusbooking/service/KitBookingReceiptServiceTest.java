@@ -69,7 +69,11 @@ class KitBookingReceiptServiceTest {
             assertThat(text).contains(
                     "Project Kit Booking Receipt", "KIT-2026-000042",
                     "Media Production Kit", "alice_student", "maya_member",
-                    "DSLR Camera", "Shotgun Mic", "APPROVED", "Receipt generated:");
+                    "DSLR Camera", "Shotgun Mic", "APPROVED", "Receipt generated:")
+                    .containsPattern("Start time: \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")
+                    .containsPattern("End time: \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")
+                    .containsPattern("Receipt generated: \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")
+                    .doesNotContain("?");
         }
     }
 

@@ -65,7 +65,10 @@ class BookingReceiptServiceTest {
             assertThat(text)
                     .contains("Approved Booking Receipt", "Booking ID:", "#50")
                     .contains("alice_student", "DSLR Camera", "EQUIPMENT")
-                    .contains("APPROVED", "bob_member", "Receipt generated:");
+                    .contains("APPROVED", "bob_member", "Receipt generated:")
+                    .contains("Start time: 2026-10-10 09:00", "End time: 2026-10-10 11:00")
+                    .containsPattern("Receipt generated: \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")
+                    .doesNotContain("?");
         }
     }
 

@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /** Generates downloadable PDF receipts for approved bookings. */
 @Service
@@ -29,7 +30,7 @@ import java.util.List;
 public class BookingReceiptService {
 
     private static final DateTimeFormatter DATE_TIME_FORMAT =
-            DateTimeFormatter.ofPattern("dd MMM uuuu, hh:mm a");
+            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm", Locale.ROOT);
 
     private final BookingRepository bookingRepository;
 
