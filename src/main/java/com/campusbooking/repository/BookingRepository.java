@@ -157,4 +157,19 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             @Param("startTime")  LocalDateTime startTime,
             @Param("endTime")    LocalDateTime endTime
     );
+
+    /** Bulk equivalent of {@link #findOverlappingBookings(Long, LocalDateTime, LocalDateTime)} for search. */
+    @Query("""
+           SELECT b FROM Booking b
+           WHERE b.resource.id IN :resourceIds
+             AND b.status IN (com.campusbooking.model.Booking.Status.CONFIRMED,
+                              com.campusbooking.model.Booking.Status.PENDING,
+                              com.campusbooking.model.Booking.Status.APPROVED)
+             AND b.startTime < :endTime
+             AND b.endTime > :startTime
+           """)
+    List<Booking> findOverlappingBookingsForResources(
+            @Param("resourceIds") List<Long> resourceIds,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
 }

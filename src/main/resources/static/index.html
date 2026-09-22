@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Campus Resource Booking Hub</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
@@ -133,6 +134,9 @@
             <button class="nav-tab active" type="button" data-tab="home" data-nav-key="home" id="tabHomeBtn" aria-current="page" aria-controls="tab-home">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>Home</span>
             </button>
+            <button class="nav-tab" type="button" data-tab="find-availability" data-nav-key="find-availability" id="tabFindAvailabilityBtn" aria-controls="tab-find-availability">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5M10.8 7.5v3.8l2.6 1.6"/></svg><span>Find availability</span>
+            </button>
             <button class="nav-tab" type="button" data-tab="browse" data-nav-key="resources" data-focus="resources" id="tabResourcesBtn" aria-controls="tab-browse">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>Resources</span>
             </button>
@@ -191,9 +195,9 @@
             <p class="page-subtitle">Keep an eye on your next reservation, approval requests, and waitlist activity.</p>
           </div>
           <div class="header-actions">
-            <button class="btn btn-primary" type="button" id="homeBrowseResourcesBtn">
+            <button class="btn btn-primary" type="button" id="homeFindAvailabilityBtn">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-              <span>Browse resources</span>
+              <span>Find availability</span>
             </button>
           </div>
         </div>
@@ -204,23 +208,191 @@
               <span class="section-eyebrow">Your overview</span>
               <h2 id="studentSnapshotTitle">A quick look at your reservations</h2>
             </div>
-            <button class="btn btn-secondary btn-sm" type="button" id="snapshotBookingsBtn">View my bookings</button>
           </div>
           <div class="snapshot-grid" id="studentSnapshotGrid">
             <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading your overview…</span></div>
           </div>
         </section>
 
-        <div class="home-quick-links" aria-label="Student shortcuts">
-          <button class="home-quick-link" type="button" data-home-target="resources">
-            <span class="home-quick-link-icon" aria-hidden="true">⌕</span><span><strong>Browse resources</strong><small>Find rooms, labs, equipment and kits</small></span>
-          </button>
-          <button class="home-quick-link" type="button" data-home-target="bookings">
-            <span class="home-quick-link-icon" aria-hidden="true">▣</span><span><strong>Review my bookings</strong><small>See upcoming reservations and history</small></span>
-          </button>
-          <button class="home-quick-link" type="button" data-home-target="waitlist">
-            <span class="home-quick-link-icon" aria-hidden="true">◷</span><span><strong>Check waitlist</strong><small>Respond to any available-slot offers</small></span>
-          </button>
+        <div class="home-dashboard-grid">
+          <section class="home-dashboard-panel home-upcoming-panel" aria-labelledby="homeUpcomingTitle">
+            <div class="home-dashboard-panel-heading">
+              <div>
+                <span class="section-eyebrow">Coming up</span>
+                <h2 id="homeUpcomingTitle">Upcoming reservations</h2>
+              </div>
+              <button class="btn btn-secondary btn-sm" type="button" id="homeViewAllBookingsBtn">View all bookings</button>
+            </div>
+            <div class="home-reservation-list" id="homeUpcomingList" aria-live="polite">
+              <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading upcoming reservations…</span></div>
+            </div>
+          </section>
+
+          <aside class="home-dashboard-panel home-actions-panel" aria-labelledby="homeQuickActionsTitle">
+            <div class="home-dashboard-panel-heading">
+              <div>
+                <span class="section-eyebrow">Shortcuts</span>
+                <h2 id="homeQuickActionsTitle">Quick actions</h2>
+              </div>
+            </div>
+            <div class="home-quick-links" aria-label="Student shortcuts">
+              <button class="home-quick-link" type="button" data-home-target="find-availability">
+                <span class="home-quick-link-icon" aria-hidden="true">◷</span><span><strong>Find availability</strong><small>Choose a time, then see what's available</small></span>
+              </button>
+              <button class="home-quick-link" type="button" data-home-target="resources">
+                <span class="home-quick-link-icon" aria-hidden="true">⌕</span><span><strong>Browse resources</strong><small>Explore rooms, labs, equipment and kits</small></span>
+              </button>
+              <button class="home-quick-link" type="button" data-home-target="bookings">
+                <span class="home-quick-link-icon" aria-hidden="true">▣</span><span><strong>My bookings</strong><small>Review requests and reservation history</small></span>
+              </button>
+            </div>
+
+            <section class="home-waitlist-offer" id="homeWaitlistOffer" aria-labelledby="homeWaitlistOfferTitle" hidden>
+              <div class="home-waitlist-offer-heading">
+                <span class="home-waitlist-offer-label">Action required</span>
+                <span class="status-pill OFFERED">Slot available</span>
+              </div>
+              <strong id="homeWaitlistOfferTitle"></strong>
+              <p id="homeWaitlistOfferTime"></p>
+              <button class="btn btn-primary btn-sm" type="button" id="homeWaitlistOfferBtn">Review offer</button>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <!-- STUDENT TIME-FIRST AVAILABILITY SEARCH -->
+      <section id="tab-find-availability" class="tab-content" role="tabpanel" aria-labelledby="tabFindAvailabilityBtn">
+        <div class="page-header">
+          <div class="header-titles">
+            <span class="section-eyebrow">Time-first booking</span>
+            <h1 class="page-title">Find availability</h1>
+            <p class="page-subtitle">Choose when you need a resource, then see what's available.</p>
+          </div>
+        </div>
+
+        <div class="time-first-workflow">
+          <section id="timeFirstWhenSection" class="time-first-step" aria-labelledby="timeFirstWhenTitle">
+            <div class="time-first-step-heading">
+              <span class="time-first-step-number">1</span>
+              <div><h2 id="timeFirstWhenTitle">When?</h2><p>Set the date, start time, and how long you need it.</p></div>
+            </div>
+            <form id="timeFirstSearchForm" class="time-first-search-form">
+              <div class="time-first-form-grid">
+                <div class="form-group">
+                  <label for="timeFirstDate">Date</label>
+                  <input type="date" id="timeFirstDate" name="date" required />
+                </div>
+                <div class="form-group">
+                  <label for="timeFirstStart">Start time</label>
+                  <input type="time" id="timeFirstStart" name="startTime" step="900" required />
+                </div>
+                <div class="form-group">
+                  <label for="timeFirstDuration">Duration</label>
+                  <select id="timeFirstDuration" name="duration" required>
+                    <option value="0.5">30 minutes</option>
+                    <option value="1">1 hour</option>
+                    <option value="1.5">1.5 hours</option>
+                    <option value="2" selected>2 hours</option>
+                    <option value="3">3 hours</option>
+                    <option value="4">4 hours</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="time-first-form-grid time-first-needs-grid">
+                <div class="form-group">
+                  <label for="timeFirstCategory">What do you need?</label>
+                  <select id="timeFirstCategory" name="type">
+                    <option value="ANY">Any resource</option>
+                    <option value="ROOM">Study room</option>
+                    <option value="LAB">Computer / specialist lab</option>
+                    <option value="EQUIPMENT">Equipment</option>
+                    <option value="KIT">Project Kit</option>
+                  </select>
+                </div>
+                <div class="form-group" id="timeFirstCapacityGroup">
+                  <label for="timeFirstCapacity">Minimum capacity</label>
+                  <select id="timeFirstCapacity" name="minCapacity">
+                    <option value="">Any</option>
+                    <option value="2">2+</option>
+                    <option value="4">4+</option>
+                    <option value="6">6+</option>
+                    <option value="8">8+</option>
+                    <option value="10">10+</option>
+                    <option value="20">20+</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="timeFirstKeyword">Keyword <span class="time-first-optional">Optional</span></label>
+                  <input type="search" id="timeFirstKeyword" name="keyword" maxlength="80" placeholder="Name or description" />
+                </div>
+              </div>
+
+              <div class="time-first-search-actions">
+                <p id="timeFirstSearchNotice" class="time-first-notice" role="status" aria-live="polite" hidden></p>
+                <button class="btn btn-primary" type="submit" id="timeFirstSearchBtn">Search availability</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="timeFirstResultsSection" class="time-first-step time-first-results" aria-labelledby="timeFirstResultsTitle" hidden>
+            <div class="time-first-results-heading">
+              <div class="time-first-step-heading">
+                <span class="time-first-step-number">2</span>
+                <div><h2 id="timeFirstResultsTitle">Available for your time</h2><p id="timeFirstInterval" class="time-first-interval"></p></div>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="timeFirstRefreshBtn">Refresh availability</button>
+            </div>
+            <div id="timeFirstResultsGrid" class="availability-results-grid" aria-live="polite"></div>
+          </section>
+
+          <section id="timeFirstReviewSection" class="time-first-step time-first-review" aria-labelledby="timeFirstReviewTitle" hidden>
+            <div class="time-first-review-heading">
+              <button type="button" class="btn btn-ghost btn-sm" id="timeFirstBackBtn">Back to results</button>
+              <div class="time-first-step-heading">
+                <span class="time-first-step-number">3</span>
+                <div><h2 id="timeFirstReviewTitle">Review your request</h2><p>Check the details before sending it for approval.</p></div>
+              </div>
+            </div>
+            <div id="timeFirstReviewDetails" class="time-first-review-details"></div>
+            <div id="timeFirstConflictNotice" class="time-first-conflict" role="alert" hidden>
+              <div><strong>This resource was just booked by someone else.</strong><p>Search availability again to see the latest options. Your request has not been submitted.</p></div>
+              <button type="button" class="btn btn-secondary btn-sm" id="timeFirstConflictRefreshBtn">Search again</button>
+            </div>
+            <div class="time-first-group-members">
+              <div>
+                <label for="timeFirstGroupMemberInput">Group members <span class="time-first-optional">Optional</span></label>
+                <p>Enter a campus username or user ID. The booking service will validate each member.</p>
+              </div>
+              <div class="time-first-member-entry">
+                <input type="text" id="timeFirstGroupMemberInput" autocomplete="off" placeholder="Username or user ID" />
+                <button type="button" class="btn btn-secondary" id="timeFirstAddMemberBtn">Add member</button>
+              </div>
+              <div id="timeFirstGroupMembersTags" class="time-first-member-tags" aria-live="polite"></div>
+            </div>
+            <div class="time-first-review-footer">
+              <div><span class="time-first-approval-label">Status expectation</span><strong>Requires Admin approval</strong></div>
+              <button type="button" class="btn btn-primary" id="timeFirstSubmitBtn">Send booking request</button>
+            </div>
+          </section>
+
+          <section id="timeFirstSuccessSection" class="time-first-step time-first-success" hidden aria-live="polite">
+            <div class="booking-success-state">
+              <div class="booking-success-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg></div>
+              <p class="section-eyebrow">Request sent</p>
+              <h2 class="booking-success-title">Your request is awaiting approval</h2>
+              <p class="booking-success-message">An Admin will review this reservation before it is confirmed.</p>
+              <div class="booking-success-details">
+                <div class="booking-success-detail"><span>Resource</span><strong id="timeFirstSuccessResource"></strong></div>
+                <div class="booking-success-detail"><span>Date and time</span><strong id="timeFirstSuccessTime"></strong></div>
+                <div class="booking-success-detail"><span>Status</span><strong>Awaiting approval</strong></div>
+              </div>
+              <div class="booking-success-actions">
+                <button type="button" class="btn btn-primary" id="timeFirstViewBookingsBtn">View my bookings</button>
+                <button type="button" class="btn btn-secondary" id="timeFirstAnotherBtn">Find another resource</button>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 

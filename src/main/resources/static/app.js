@@ -35,6 +35,14 @@ const state = {
   selectedScheduleStart: null,
   selectedScheduleEnd: null,
   selectedMobileDay: 0,
+  timeFirstResults: [],
+  timeFirstSearch: null,
+  timeFirstSearchError: null,
+  timeFirstSearching: false,
+  timeFirstSelection: null,
+  timeFirstSuccess: null,
+  timeFirstConflict: false,
+  timeFirstSubmitting: false,
   resourceLoadError: null,
   kitLoadError: null,
   resourcesLoaded: false,
@@ -121,6 +129,7 @@ function bindCatalogueImageFallbacks(container) {
 
 const STUDENT_ROUTES = Object.freeze({
   home: { tabId: 'home', title: 'Home' },
+  'find-availability': { tabId: 'find-availability', title: 'Find availability' },
   resources: { tabId: 'browse', title: 'Resources' },
   bookings: { tabId: 'my-bookings', title: 'My bookings' },
   waitlist: { tabId: 'waitlist', title: 'Waitlist' }
@@ -205,13 +214,50 @@ const elements = {
 
   // Tabs
   tabHome: document.getElementById('tab-home'),
+  tabFindAvailability: document.getElementById('tab-find-availability'),
   tabBrowse: document.getElementById('tab-browse'),
   tabMyBookings: document.getElementById('tab-my-bookings'),
   tabWaitlist: document.getElementById('tab-waitlist'),
   tabAdmin: document.getElementById('tab-admin'),
   homeUserName: document.getElementById('homeUserName'),
-  homeBrowseResourcesBtn: document.getElementById('homeBrowseResourcesBtn'),
+  homeFindAvailabilityBtn: document.getElementById('homeFindAvailabilityBtn'),
   homeQuickLinks: document.querySelectorAll('.home-quick-link'),
+  homeUpcomingList: document.getElementById('homeUpcomingList'),
+  homeViewAllBookingsBtn: document.getElementById('homeViewAllBookingsBtn'),
+  homeWaitlistOffer: document.getElementById('homeWaitlistOffer'),
+  homeWaitlistOfferTitle: document.getElementById('homeWaitlistOfferTitle'),
+  homeWaitlistOfferTime: document.getElementById('homeWaitlistOfferTime'),
+  homeWaitlistOfferBtn: document.getElementById('homeWaitlistOfferBtn'),
+
+  // Time-first availability search
+  timeFirstSearchForm: document.getElementById('timeFirstSearchForm'),
+  timeFirstDate: document.getElementById('timeFirstDate'),
+  timeFirstStart: document.getElementById('timeFirstStart'),
+  timeFirstDuration: document.getElementById('timeFirstDuration'),
+  timeFirstCategory: document.getElementById('timeFirstCategory'),
+  timeFirstCapacityGroup: document.getElementById('timeFirstCapacityGroup'),
+  timeFirstCapacity: document.getElementById('timeFirstCapacity'),
+  timeFirstKeyword: document.getElementById('timeFirstKeyword'),
+  timeFirstSearchNotice: document.getElementById('timeFirstSearchNotice'),
+  timeFirstSearchBtn: document.getElementById('timeFirstSearchBtn'),
+  timeFirstResultsSection: document.getElementById('timeFirstResultsSection'),
+  timeFirstInterval: document.getElementById('timeFirstInterval'),
+  timeFirstResultsGrid: document.getElementById('timeFirstResultsGrid'),
+  timeFirstRefreshBtn: document.getElementById('timeFirstRefreshBtn'),
+  timeFirstReviewSection: document.getElementById('timeFirstReviewSection'),
+  timeFirstBackBtn: document.getElementById('timeFirstBackBtn'),
+  timeFirstReviewDetails: document.getElementById('timeFirstReviewDetails'),
+  timeFirstConflictNotice: document.getElementById('timeFirstConflictNotice'),
+  timeFirstConflictRefreshBtn: document.getElementById('timeFirstConflictRefreshBtn'),
+  timeFirstGroupMemberInput: document.getElementById('timeFirstGroupMemberInput'),
+  timeFirstAddMemberBtn: document.getElementById('timeFirstAddMemberBtn'),
+  timeFirstGroupMembersTags: document.getElementById('timeFirstGroupMembersTags'),
+  timeFirstSubmitBtn: document.getElementById('timeFirstSubmitBtn'),
+  timeFirstSuccessSection: document.getElementById('timeFirstSuccessSection'),
+  timeFirstSuccessResource: document.getElementById('timeFirstSuccessResource'),
+  timeFirstSuccessTime: document.getElementById('timeFirstSuccessTime'),
+  timeFirstViewBookingsBtn: document.getElementById('timeFirstViewBookingsBtn'),
+  timeFirstAnotherBtn: document.getElementById('timeFirstAnotherBtn'),
 
   // Browse Tab
   resourcesGrid: document.getElementById('resourcesGrid'),
@@ -222,7 +268,6 @@ const elements = {
   metricAvailable: document.getElementById('metricAvailable'),
   studentSnapshot: document.getElementById('studentSnapshot'),
   studentSnapshotGrid: document.getElementById('studentSnapshotGrid'),
-  snapshotBookingsBtn: document.getElementById('snapshotBookingsBtn'),
 
   // My Bookings Tab
   myBookingsList: document.getElementById('myBookingsList'),
@@ -476,6 +521,15 @@ const api = {
     const query = new URLSearchParams({ start, end });
     const res = await fetch(`/api/resources/${id}/availability?${query}`);
     if (!res.ok) throw new Error(await res.text() || 'Failed to load resource availability');
+    return res.json();
+  },
+
+  async searchAvailability(start, end, type, minCapacity, keyword) {
+    const query = new URLSearchParams({ start, end, type });
+    if (minCapacity) query.set('minCapacity', minCapacity);
+    if (keyword) query.set('keyword', keyword);
+    const res = await fetch(`/api/availability/search?${query}`);
+    if (!res.ok) throw await responseError(res, 'Availability search failed. Please try again.');
     return res.json();
   },
 
@@ -1128,6 +1182,15 @@ function resetPrivateState() {
   state.activeTab = 'home';
   state.activeNavKey = 'home';
   state.bookingView = 'UPCOMING';
+  state.timeFirstResults = [];
+  state.timeFirstSearch = null;
+  state.timeFirstSearchError = null;
+  state.timeFirstSearching = false;
+  state.timeFirstSelection = null;
+  state.timeFirstSuccess = null;
+  state.timeFirstConflict = false;
+  state.timeFirstSubmitting = false;
+  state.selectedGroupMembers = [];
   state.resourcesLoaded = false;
   state.kitsLoaded = false;
   state.resourceLoadError = null;
@@ -1271,6 +1334,7 @@ function switchTab(tabId, options = {}) {
   const isAdmin = state.currentUser.role === 'ADMIN';
   const defaultStudentRoutes = {
     home: 'home',
+    'find-availability': 'find-availability',
     browse: 'resources',
     'my-bookings': 'bookings',
     waitlist: 'waitlist'
@@ -1314,7 +1378,7 @@ function switchTab(tabId, options = {}) {
     }
   });
 
-  const panels = [elements.tabHome, elements.tabBrowse,
+  const panels = [elements.tabHome, elements.tabFindAvailability, elements.tabBrowse,
     elements.tabMyBookings, elements.tabWaitlist, elements.tabAdmin];
   panels.forEach((panel) => {
     const active = panel.id === `tab-${tabId}`;
@@ -1380,6 +1444,372 @@ async function loadAllData() {
   await Promise.all(loaders);
 }
 
+function initialiseTimeFirstSearchForm() {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  elements.timeFirstDate.min = getLocalIsoString(today).slice(0, 10);
+  elements.timeFirstDate.value = getLocalIsoString(tomorrow).slice(0, 10);
+  elements.timeFirstStart.value = '09:00';
+  updateTimeFirstCapacityVisibility();
+}
+
+function updateTimeFirstCapacityVisibility() {
+  const category = elements.timeFirstCategory.value;
+  elements.timeFirstCapacityGroup.hidden = category === 'EQUIPMENT' || category === 'KIT';
+  if (elements.timeFirstCapacityGroup.hidden) elements.timeFirstCapacity.value = '';
+}
+
+function invalidateTimeFirstResultsOnCriteriaChange(event) {
+  if (state.timeFirstSelection || state.timeFirstSuccess || !state.timeFirstSearch) return;
+  if (!['timeFirstDate', 'timeFirstStart', 'timeFirstDuration', 'timeFirstCategory',
+    'timeFirstCapacity', 'timeFirstKeyword'].includes(event.target.id)) return;
+  state.timeFirstSearch = null;
+  state.timeFirstResults = [];
+  state.timeFirstSearchError = null;
+  renderTimeFirstWorkflow();
+}
+
+function setTimeFirstNotice(message = '') {
+  elements.timeFirstSearchNotice.hidden = !message;
+  elements.timeFirstSearchNotice.textContent = message;
+}
+
+function getTimeFirstCriteria() {
+  const date = elements.timeFirstDate.value;
+  const time = elements.timeFirstStart.value;
+  const durationHours = Number(elements.timeFirstDuration.value);
+  if (!date || !time || !Number.isFinite(durationHours) || durationHours <= 0) {
+    throw new Error('Choose a date, start time, and positive duration.');
+  }
+
+  const start = new Date(`${date}T${time}:00`);
+  if (Number.isNaN(start.getTime())) throw new Error('Enter a valid date and start time.');
+  if (start <= new Date()) throw new Error('Choose a start time in the future.');
+  const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+  if (!(end > start)) throw new Error('Duration must be greater than zero.');
+
+  return {
+    startTime: getLocalIsoString(start),
+    endTime: getLocalIsoString(end),
+    type: elements.timeFirstCategory.value,
+    minCapacity: elements.timeFirstCapacityGroup.hidden ? '' : elements.timeFirstCapacity.value,
+    keyword: elements.timeFirstKeyword.value.trim()
+  };
+}
+
+async function handleTimeFirstSearchSubmit(event) {
+  event.preventDefault();
+  setTimeFirstNotice('');
+  let criteria;
+  try {
+    criteria = getTimeFirstCriteria();
+  } catch (error) {
+    setTimeFirstNotice(error.message);
+    if (!elements.timeFirstDate.value) elements.timeFirstDate.focus();
+    else if (!elements.timeFirstStart.value) elements.timeFirstStart.focus();
+    else elements.timeFirstDuration.focus();
+    return;
+  }
+
+  state.timeFirstSearch = criteria;
+  state.timeFirstResults = [];
+  state.timeFirstSearchError = null;
+  state.timeFirstSelection = null;
+  state.timeFirstSuccess = null;
+  state.timeFirstConflict = false;
+  state.timeFirstSearching = true;
+  renderTimeFirstWorkflow();
+  elements.timeFirstSearchBtn.disabled = true;
+  elements.timeFirstSearchBtn.textContent = 'Searching…';
+  try {
+    const response = await api.searchAvailability(
+      criteria.startTime, criteria.endTime, criteria.type, criteria.minCapacity, criteria.keyword
+    );
+    state.timeFirstResults = response.results || [];
+  } catch (error) {
+    state.timeFirstSearchError = error.message || 'Availability search failed. Please try again.';
+  } finally {
+    state.timeFirstSearching = false;
+    elements.timeFirstSearchBtn.disabled = false;
+    elements.timeFirstSearchBtn.textContent = 'Search availability';
+    renderTimeFirstWorkflow();
+  }
+}
+
+function formatTimeFirstInterval(startTime, endTime) {
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return `${startTime} – ${endTime}`;
+  const date = start.toLocaleDateString('en-NZ', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+  });
+  const startLabel = start.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+  const endLabel = end.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+  const endDate = start.toDateString() === end.toDateString()
+    ? ''
+    : ` ${end.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`;
+  return `${date} · ${startLabel}–${endDate ? `${endLabel}${endDate}` : endLabel}`;
+}
+
+function renderTimeFirstWorkflow() {
+  const hasSelection = Boolean(state.timeFirstSelection);
+  const hasSuccess = Boolean(state.timeFirstSuccess);
+  document.getElementById('timeFirstWhenSection').hidden = hasSelection || hasSuccess;
+  elements.timeFirstResultsSection.hidden = !state.timeFirstSearch || hasSelection || hasSuccess;
+  elements.timeFirstReviewSection.hidden = !hasSelection || hasSuccess;
+  elements.timeFirstSuccessSection.hidden = !hasSuccess;
+
+  if (!state.timeFirstSearch) return;
+  if (hasSuccess) {
+    renderTimeFirstSuccess();
+  } else if (hasSelection) {
+    renderTimeFirstReview();
+  } else {
+    renderTimeFirstResults();
+  }
+}
+
+function renderTimeFirstResults() {
+  const search = state.timeFirstSearch;
+  elements.timeFirstInterval.textContent = formatTimeFirstInterval(search.startTime, search.endTime);
+  elements.timeFirstRefreshBtn.disabled = Boolean(state.timeFirstSearching);
+  const grid = elements.timeFirstResultsGrid;
+  grid.innerHTML = '';
+
+  if (state.timeFirstSearching) {
+    grid.innerHTML = '<div class="empty-state" role="status"><div class="spinner spinner-sm"></div><p>Checking resources for this interval…</p></div>';
+    return;
+  }
+
+  if (state.timeFirstSearchError) {
+    grid.innerHTML = `
+      <div class="availability-empty-state" role="alert">
+        <h3>Availability could not be loaded</h3>
+        <p>${escapeHtml(state.timeFirstSearchError)}</p>
+        <div class="availability-empty-actions"><button type="button" class="btn btn-secondary" data-time-first-action="retry">Try again</button></div>
+      </div>`;
+    grid.querySelector('[data-time-first-action="retry"]')?.addEventListener('click', () => elements.timeFirstSearchForm.requestSubmit());
+    return;
+  }
+
+  if (state.timeFirstResults.length === 0) {
+    grid.innerHTML = `
+      <div class="availability-empty-state">
+        <h3>No resources are available for this time.</h3>
+        <p>Try another interval or broaden your search to find a suitable option.</p>
+        <div class="availability-empty-actions">
+          <button type="button" class="btn btn-secondary" data-time-first-action="date">Change date or time</button>
+          <button type="button" class="btn btn-secondary" data-time-first-action="capacity">Reduce capacity</button>
+          <button type="button" class="btn btn-secondary" data-time-first-action="category">Choose another category</button>
+          <button type="button" class="btn btn-ghost" data-time-first-action="resources">Browse Resources</button>
+        </div>
+      </div>`;
+    grid.querySelector('[data-time-first-action="date"]')?.addEventListener('click', () => elements.timeFirstDate.focus());
+    grid.querySelector('[data-time-first-action="capacity"]')?.addEventListener('click', () => {
+      elements.timeFirstCapacity.value = '';
+      elements.timeFirstCapacity.focus();
+      elements.timeFirstSearchForm.requestSubmit();
+    });
+    grid.querySelector('[data-time-first-action="category"]')?.addEventListener('click', () => elements.timeFirstCategory.focus());
+    grid.querySelector('[data-time-first-action="resources"]')?.addEventListener('click', () =>
+      switchTab('browse', { navKey: 'resources', focus: 'resources' })
+    );
+    return;
+  }
+
+  state.timeFirstResults.forEach((result) => grid.appendChild(createAvailabilityResultCard(result)));
+}
+
+function createAvailabilityResultCard(result) {
+  const isKit = result.targetType === 'KIT';
+  const isRoomOrLab = result.type === 'ROOM' || result.type === 'LAB';
+  const card = document.createElement('article');
+  card.className = 'availability-result-card';
+  const image = isKit
+    ? catalogueImageMarkup(KIT_IMAGE_BY_NAME[result.name], result.name, 'KIT')
+    : isRoomOrLab
+      ? catalogueImageMarkup(RESOURCE_IMAGE_BY_NAME[result.name], result.name, result.type)
+      : '';
+  const metadata = [
+    result.location
+      ? `<div class="catalogue-meta-item"><span>${isRoomOrLab ? 'Location' : 'Pickup'}</span><strong>${escapeHtml(result.location)}</strong></div>`
+      : '',
+    result.capacity != null
+      ? `<div class="catalogue-meta-item"><span>Capacity</span><strong>${escapeHtml(result.capacity)} people</strong></div>`
+      : ''
+  ].filter(Boolean).join('');
+  const count = Number(result.includedResourceCount || 0);
+  card.innerHTML = `
+    ${image}
+    <div class="availability-result-card-content">
+      ${!isRoomOrLab && !isKit ? `<div class="catalogue-equipment-icon" aria-hidden="true">${equipmentIconSvg(result.name)}</div>` : ''}
+      <span class="availability-result-status">Available for this time</span>
+      <h3>${escapeHtml(result.name)}</h3>
+      ${metadata ? `<div class="catalogue-resource-meta">${metadata}</div>` : ''}
+      <p>${escapeHtml(result.description || (isKit ? 'Pre-configured Project Kit for student work.' : 'No detailed specifications provided.'))}</p>
+      ${isKit ? `<p class="catalogue-kit-count">${count} included ${count === 1 ? 'resource' : 'resources'} · ${escapeHtml(result.readiness || 'READY')}</p>` : ''}
+    </div>
+    <div class="availability-result-actions"><button class="btn btn-primary btn-sm" type="button">Select</button></div>`;
+  card.querySelector('button').addEventListener('click', () => selectTimeFirstResult(result));
+  bindCatalogueImageFallbacks(card);
+  return card;
+}
+
+function selectTimeFirstResult(result) {
+  state.timeFirstSelection = {
+    result,
+    startTime: state.timeFirstSearch.startTime,
+    endTime: state.timeFirstSearch.endTime
+  };
+  state.timeFirstConflict = false;
+  state.selectedGroupMembers = [];
+  renderTimeFirstGroupMembers();
+  renderTimeFirstWorkflow();
+  elements.timeFirstReviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderTimeFirstReview() {
+  const { result, startTime, endTime } = state.timeFirstSelection;
+  const isKit = result.targetType === 'KIT';
+  const date = new Date(startTime).toLocaleDateString('en-NZ', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+  const start = new Date(startTime).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+  const end = new Date(endTime).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' });
+  const details = [
+    ['Resource', `${isKit ? 'Project Kit · ' : ''}${result.name}`],
+    ['Date', date],
+    ['Start time', start],
+    ['End time', end],
+    ['Duration', formatDuration(startTime, endTime)],
+    result.location ? [isKit ? 'Included-resource information' : (isRoomOrLabType(result.type) ? 'Location' : 'Pickup location'), result.location] : null,
+    result.capacity != null && !isKit ? ['Capacity', `${result.capacity} people`] : null,
+    isKit ? ['Included resources', String(result.includedResourceCount || 0)] : null
+  ].filter(Boolean);
+  elements.timeFirstReviewDetails.innerHTML = details.map(([label, value]) => `
+    <div class="time-first-review-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>
+  `).join('');
+  elements.timeFirstConflictNotice.hidden = !state.timeFirstConflict;
+  elements.timeFirstSubmitBtn.disabled = Boolean(state.timeFirstSubmitting);
+  elements.timeFirstSubmitBtn.textContent = state.timeFirstSubmitting ? 'Sending request…' : 'Send booking request';
+  renderTimeFirstGroupMembers();
+}
+
+function isRoomOrLabType(type) {
+  return type === 'ROOM' || type === 'LAB';
+}
+
+function addTimeFirstGroupMember() {
+  const raw = elements.timeFirstGroupMemberInput.value.trim();
+  if (!raw) return;
+  const isId = /^\d+$/.test(raw);
+  const member = isId
+    ? { id: Number(raw), display: `Peer ID: ${raw}` }
+    : { username: raw, display: `@${raw}` };
+  if ((isId && member.id === Number(state.currentUser.id))
+      || (!isId && raw.toLowerCase() === String(state.currentUser.username).toLowerCase())) {
+    showToast('Notice', 'You are automatically included as the reservation owner.', 'info', 2500);
+    elements.timeFirstGroupMemberInput.value = '';
+    return;
+  }
+  const duplicate = state.selectedGroupMembers.some((existing) => isId
+    ? existing.id === member.id
+    : existing.username && existing.username.toLowerCase() === member.username.toLowerCase());
+  if (duplicate) {
+    showToast('Notice', 'This member is already added to the group list.', 'warning', 2000);
+    elements.timeFirstGroupMemberInput.value = '';
+    return;
+  }
+  state.selectedGroupMembers.push(member);
+  elements.timeFirstGroupMemberInput.value = '';
+  renderTimeFirstGroupMembers();
+}
+
+function renderTimeFirstGroupMembers() {
+  const container = elements.timeFirstGroupMembersTags;
+  if (!container) return;
+  container.innerHTML = '';
+  if (state.selectedGroupMembers.length === 0) {
+    container.innerHTML = '<span class="time-first-optional">No group members added.</span>';
+    return;
+  }
+  state.selectedGroupMembers.forEach((member, index) => {
+    const tag = document.createElement('span');
+    tag.className = 'time-first-member-tag';
+    tag.innerHTML = `<span>${escapeHtml(member.display)}</span><button type="button" aria-label="Remove ${escapeHtml(member.display)}">×</button>`;
+    tag.querySelector('button').addEventListener('click', () => {
+      state.selectedGroupMembers.splice(index, 1);
+      renderTimeFirstGroupMembers();
+    });
+    container.appendChild(tag);
+  });
+}
+
+async function submitTimeFirstBooking() {
+  const selection = state.timeFirstSelection;
+  if (!selection || state.timeFirstSubmitting) return;
+  const { result, startTime, endTime } = selection;
+  const isKit = result.targetType === 'KIT';
+  const memberUserIds = state.selectedGroupMembers.filter((member) => member.id !== undefined).map((member) => member.id);
+  const memberUsernames = state.selectedGroupMembers.filter((member) => member.username !== undefined).map((member) => member.username);
+  const payload = {
+    userId: state.currentUser.id,
+    startTime,
+    endTime,
+    memberUserIds: memberUserIds.length ? memberUserIds : undefined,
+    memberUsernames: memberUsernames.length ? memberUsernames : undefined
+  };
+
+  state.timeFirstSubmitting = true;
+  renderTimeFirstReview();
+  try {
+    const created = isKit
+      ? await api.bookKit(result.id, payload)
+      : await api.createBooking({ ...payload, resourceId: result.id });
+    state.timeFirstSuccess = {
+      isKit,
+      name: isKit ? (created.kitName || result.name) : result.name,
+      startTime,
+      endTime
+    };
+    state.timeFirstSelection = null;
+    state.timeFirstConflict = false;
+    state.selectedGroupMembers = [];
+    renderTimeFirstWorkflow();
+    await loadUserData();
+  } catch (error) {
+    if (error.status === 409) {
+      state.timeFirstConflict = true;
+      renderTimeFirstWorkflow();
+      return;
+    }
+    showToast('Booking request failed', error.message || 'Please check your details and try again.', 'error', 5000);
+  } finally {
+    state.timeFirstSubmitting = false;
+    if (state.timeFirstSelection) renderTimeFirstReview();
+  }
+}
+
+function renderTimeFirstSuccess() {
+  const success = state.timeFirstSuccess;
+  if (!success) return;
+  elements.timeFirstSuccessResource.textContent = `${success.isKit ? 'Project Kit · ' : ''}${success.name}`;
+  elements.timeFirstSuccessTime.textContent = formatTimeFirstInterval(success.startTime, success.endTime);
+}
+
+function resetTimeFirstWorkflow() {
+  state.timeFirstSearch = null;
+  state.timeFirstResults = [];
+  state.timeFirstSearchError = null;
+  state.timeFirstSelection = null;
+  state.timeFirstSuccess = null;
+  state.timeFirstConflict = false;
+  state.selectedGroupMembers = [];
+  renderTimeFirstWorkflow();
+  elements.timeFirstDate.focus();
+}
+
 async function loadResources() {
   try {
     const data = await api.getResources();
@@ -1420,6 +1850,10 @@ async function loadUserData() {
   state.userDataLoaded = false;
   if (elements.studentSnapshotGrid && state.currentUser.role !== 'ADMIN') {
     elements.studentSnapshotGrid.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading your overview…</span></div>';
+  }
+  if (elements.homeUpcomingList && state.currentUser.role !== 'ADMIN') {
+    elements.homeUpcomingList.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading upcoming reservations…</span></div>';
+    elements.homeWaitlistOffer.hidden = true;
   }
   elements.myBookingsList.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading your reservations...</p></div>';
   elements.myWaitlistList.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading your waitlist activity...</p></div>';
@@ -1466,6 +1900,7 @@ async function loadUserData() {
   await waitlistPromise;
   state.userDataLoaded = true;
   renderStudentSnapshot();
+  renderStudentHomeDashboard();
   updateMetrics();
 }
 
@@ -1625,6 +2060,54 @@ function renderStudentSnapshot() {
       </div>
     </article>
   `;
+}
+
+function renderStudentHomeDashboard() {
+  if (!elements.homeUpcomingList || state.currentUser?.role === 'ADMIN' || !state.userDataLoaded) return;
+
+  const upcoming = getStudentReservationItems(false)
+    .filter((item) => item.kind === 'KIT'
+      ? isCurrentDashboardKit(item.data)
+      : isCurrentDashboardBooking(item.data))
+    .slice(0, 4);
+
+  if (upcoming.length === 0) {
+    elements.homeUpcomingList.innerHTML = `
+      <div class="home-upcoming-empty">
+        <strong>No upcoming reservations</strong>
+        <span>Your active room, lab, equipment, and Kit reservations will appear here.</span>
+      </div>`;
+  } else {
+    elements.homeUpcomingList.innerHTML = upcoming.map((item) => {
+      const booking = item.data;
+      const name = item.kind === 'KIT'
+        ? (booking.kitName || 'Project Kit')
+        : (booking.resourceName || 'Resource reservation');
+      const kindLabel = item.kind === 'KIT' ? 'Project Kit' : 'Reservation';
+      return `
+        <article class="home-reservation-row">
+          <div class="home-reservation-copy">
+            <strong>${escapeHtml(name)}</strong>
+            <span>${escapeHtml(formatTimeFirstInterval(booking.startTime, booking.endTime))}</span>
+            <span class="status-pill ${escapeHtml(booking.status)}">${escapeHtml(getBookingDisplayStatus(booking))}</span>
+          </div>
+          <button class="btn btn-ghost btn-sm home-reservation-view" type="button" aria-label="View ${escapeHtml(kindLabel.toLowerCase())} details">View</button>
+        </article>`;
+    }).join('');
+  }
+
+  const activeOffer = state.userWaitlists
+    .filter((item) => item.status === 'OFFERED')
+    .filter((item) => !item.offerExpiresAt || new Date(item.offerExpiresAt).getTime() > Date.now())
+    .sort((a, b) => new Date(a.offerExpiresAt || 0).getTime() - new Date(b.offerExpiresAt || 0).getTime())[0];
+  elements.homeWaitlistOffer.hidden = !activeOffer;
+  if (activeOffer) {
+    elements.homeWaitlistOfferTitle.textContent = activeOffer.resourceName || 'Waitlist offer';
+    elements.homeWaitlistOfferTime.textContent = formatTimeFirstInterval(
+      activeOffer.requestedStart,
+      activeOffer.requestedEnd
+    );
+  }
 }
 
 function renderErrorState(container, title, message, onRetry, options = {}) {
@@ -3743,17 +4226,29 @@ function setupEventListeners() {
     }
   });
 
-  elements.homeBrowseResourcesBtn.addEventListener('click', () =>
-    switchTab('browse', { navKey: 'resources', focus: 'resources' })
+  elements.homeFindAvailabilityBtn.addEventListener('click', () =>
+    switchTab('find-availability', { navKey: 'find-availability' })
   );
   elements.homeQuickLinks.forEach((button) => {
     button.addEventListener('click', () => {
       const target = button.dataset.homeTarget;
+      if (target === 'find-availability') switchTab('find-availability', { navKey: 'find-availability' });
       if (target === 'resources') switchTab('browse', { navKey: 'resources', focus: 'resources' });
       if (target === 'bookings') switchTab('my-bookings', { navKey: 'bookings' });
       if (target === 'waitlist') switchTab('waitlist', { navKey: 'waitlist' });
     });
   });
+  elements.homeUpcomingList?.addEventListener('click', (event) => {
+    if (event.target.closest('.home-reservation-view')) {
+      switchTab('my-bookings', { navKey: 'bookings' });
+    }
+  });
+  elements.homeViewAllBookingsBtn?.addEventListener('click', () =>
+    switchTab('my-bookings', { navKey: 'bookings' })
+  );
+  elements.homeWaitlistOfferBtn?.addEventListener('click', () =>
+    switchTab('waitlist', { navKey: 'waitlist' })
+  );
 
   document.addEventListener('click', (event) => {
     const routeLink = event.target.closest('[data-nav-to]');
@@ -3789,7 +4284,6 @@ function setupEventListeners() {
     renderResources();
   });
 
-  elements.snapshotBookingsBtn?.addEventListener('click', () => switchTab('my-bookings', { navKey: 'bookings' }));
 
   // My Bookings Refresh
   elements.refreshMyBookingsBtn.addEventListener('click', () => {
@@ -3825,6 +4319,31 @@ function setupEventListeners() {
 
   elements.bookingForm.addEventListener('submit', handleBookingSubmit);
   elements.joinWaitlistFromConflictBtn.addEventListener('click', handleJoinWaitlistFromConflict);
+
+  // Time-first availability search and parent-level booking path
+  elements.timeFirstSearchForm.addEventListener('submit', handleTimeFirstSearchSubmit);
+  elements.timeFirstSearchForm.addEventListener('input', invalidateTimeFirstResultsOnCriteriaChange);
+  elements.timeFirstSearchForm.addEventListener('change', invalidateTimeFirstResultsOnCriteriaChange);
+  elements.timeFirstCategory.addEventListener('change', updateTimeFirstCapacityVisibility);
+  elements.timeFirstRefreshBtn.addEventListener('click', () => elements.timeFirstSearchForm.requestSubmit());
+  elements.timeFirstBackBtn.addEventListener('click', () => {
+    state.timeFirstSelection = null;
+    state.timeFirstConflict = false;
+    renderTimeFirstWorkflow();
+  });
+  elements.timeFirstConflictRefreshBtn.addEventListener('click', () => elements.timeFirstSearchForm.requestSubmit());
+  elements.timeFirstAddMemberBtn.addEventListener('click', addTimeFirstGroupMember);
+  elements.timeFirstGroupMemberInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addTimeFirstGroupMember();
+    }
+  });
+  elements.timeFirstSubmitBtn.addEventListener('click', submitTimeFirstBooking);
+  elements.timeFirstViewBookingsBtn.addEventListener('click', () =>
+    switchTab('my-bookings', { navKey: 'bookings' })
+  );
+  elements.timeFirstAnotherBtn.addEventListener('click', resetTimeFirstWorkflow);
   elements.clearSlotSelectionBtn.addEventListener('click', () => clearScheduleSelection());
   elements.previousWeekBtn.addEventListener('click', () => changeAvailabilityWeek(-7));
   elements.nextWeekBtn.addEventListener('click', () => changeAvailabilityWeek(7));
@@ -3878,6 +4397,7 @@ function setupEventListeners() {
 // ============================================================================
 async function initApp() {
   setupEventListeners();
+  initialiseTimeFirstSearchForm();
   await restoreSession();
 }
 

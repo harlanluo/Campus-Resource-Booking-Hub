@@ -68,7 +68,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/index.html", "/style.css", "/app.js", "/favicon.ico").permitAll()
+                        .requestMatchers("/", "/index.html", "/style.css", "/app.js", "/favicon.ico", "/favicon.svg").permitAll()
                         .requestMatchers("/images/auth/login-hero.webp").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/h2-console/**").hasRole("ADMIN")

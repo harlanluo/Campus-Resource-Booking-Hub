@@ -130,4 +130,28 @@ public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime,
             @Param("now") LocalDateTime now);
+
+    @Query("""
+           SELECT DISTINCT w.resource.id FROM Waitlist w
+           WHERE w.resource.id IN :resourceIds
+             AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
+             AND w.offerExpiresAt > :now
+             AND w.requestedStart < :endTime
+             AND w.requestedEnd > :startTime
+           """)
+    List<Long> findResourceIdsWithActiveOffersOverlapping(
+            @Param("resourceIds") List<Long> resourceIds,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("now") LocalDateTime now);
+
+    @Query("""
+           SELECT DISTINCT w.resource.id FROM Waitlist w
+           WHERE w.resource.id IN :resourceIds
+             AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
+             AND (w.offerExpiresAt IS NULL OR w.offerExpiresAt <= :now)
+           """)
+    List<Long> findResourceIdsWithExpiredOffers(
+            @Param("resourceIds") List<Long> resourceIds,
+            @Param("now") LocalDateTime now);
 }

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Campus Booking Hub">
+  <rect width="64" height="64" rx="15" fill="#1d4ed8"/>
+  <path d="M15 16.5A4.5 4.5 0 0 1 19.5 12H49v40H19.5A4.5 4.5 0 0 1 15 47.5z" fill="#fff"/>
+  <path d="M15 16.5A4.5 4.5 0 0 1 19.5 12H23v40h-3.5a4.5 4.5 0 0 1-4.5-4.5z" fill="#dbeafe"/>
+  <path d="M29 23h13M29 31h13M29 39h9" fill="none" stroke="#1d4ed8" stroke-linecap="round" stroke-width="3"/>
+</svg>

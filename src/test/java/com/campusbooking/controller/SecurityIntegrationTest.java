@@ -24,6 +24,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -52,12 +54,22 @@ class SecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Unauthenticated visitors can load the public application entry point and login hero")
+    @DisplayName("Unauthenticated visitors can load the public application entry point and favicon")
     void publicEntryPointIsAvailableWithoutAuthentication() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("/favicon.svg")));
         mockMvc.perform(get("/app.js"))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/favicon.svg"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.valueOf("image/svg+xml")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("<svg")));
+        mockMvc.perform(get("/favicon.ico"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "/favicon.svg"));
         mockMvc.perform(get("/images/auth/login-hero.webp"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/images/resources/study-room-a.webp"))

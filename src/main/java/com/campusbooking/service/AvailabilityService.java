@@ -3,6 +3,7 @@ package com.campusbooking.service;
 import com.campusbooking.dto.AvailabilityResponseDTO;
 import com.campusbooking.dto.AvailabilityResponseDTO.SlotDTO;
 import com.campusbooking.dto.AvailabilityResponseDTO.SlotStatus;
+import com.campusbooking.dto.AvailabilitySearchResponseDTO;
 import com.campusbooking.model.Booking;
 import com.campusbooking.model.Kit;
 import com.campusbooking.model.Resource;
@@ -22,8 +23,12 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
 
 /** Builds privacy-safe bookability schedules using the existing conflict query. */
 @Service
@@ -117,6 +122,110 @@ public class AvailabilityService {
                 .build();
     }
 
+    /** Searches operationally available resources and Kits for one exact future interval. */
+    @Transactional
+    public AvailabilitySearchResponseDTO searchAvailable(
+            LocalDateTime start,
+            LocalDateTime end,
+            String requestedType,
+            Integer minCapacity,
+            String keyword) {
+        validateWindow(start, end);
+        LocalDateTime now = LocalDateTime.now();
+        if (!start.isAfter(now)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "start must be in the future.");
+        }
+        if (minCapacity != null && minCapacity < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "minCapacity must be positive.");
+        }
+
+        String type = requestedType == null || requestedType.isBlank()
+                ? "ANY" : requestedType.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("ANY", "ROOM", "LAB", "EQUIPMENT", "KIT").contains(type)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "type must be ANY, ROOM, LAB, EQUIPMENT, or KIT.");
+        }
+        String query = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
+
+        List<Resource> matchingResources = "KIT".equals(type)
+                ? List.of()
+                : resourceRepository.findAll().stream()
+                        .filter(resource -> matchesType(resource, type))
+                        .filter(resource -> matchesCapacity(resource, type, minCapacity))
+                        .filter(resource -> matchesKeyword(query, resource.getName(), resource.getType(),
+                                resource.getDescription(), resource.getLocation()))
+                        .toList();
+        List<Kit> matchingKits = "ROOM".equals(type) || "LAB".equals(type) || "EQUIPMENT".equals(type)
+                ? List.of()
+                : kitRepository.findAllWithResources().stream()
+                        .filter(kit -> matchesKeyword(query, kit.getName(), kit.getDescription()))
+                        .toList();
+
+        List<Resource> kitResources = matchingKits.stream()
+                .flatMap(kit -> kit.getResources() == null ? java.util.stream.Stream.empty()
+                        : kit.getResources().stream())
+                .distinct()
+                .toList();
+        Set<Long> checkedIds = new HashSet<>();
+        matchingResources.stream().map(Resource::getId).filter(id -> id != null).forEach(checkedIds::add);
+        kitResources.stream().map(Resource::getId).filter(id -> id != null).forEach(checkedIds::add);
+        List<Long> checkedResourceIds = checkedIds.stream().sorted().toList();
+
+        Map<Long, List<Booking>> conflictsByResource = new HashMap<>();
+        if (!checkedResourceIds.isEmpty()) {
+            waitlistService.processExpiredOffersForResources(checkedResourceIds, now);
+            bookingRepository.findOverlappingBookingsForResources(checkedResourceIds, start, end)
+                    .forEach(booking -> conflictsByResource
+                            .computeIfAbsent(booking.getResource().getId(), ignored -> new ArrayList<>())
+                            .add(booking));
+        }
+        Set<Long> heldResourceIds = waitlistService.getResourceIdsWithActiveOfferConflicts(
+                checkedResourceIds, start, end, now);
+        Predicate<Long> held = heldResourceIds::contains;
+
+        List<AvailabilitySearchResponseDTO.ResultDTO> results = new ArrayList<>();
+        for (Resource resource : matchingResources) {
+            if (determineStatus(start, end, now, List.of(resource), conflictsByResource, held)
+                    == SlotStatus.AVAILABLE) {
+                results.add(AvailabilitySearchResponseDTO.ResultDTO.builder()
+                        .targetType("RESOURCE")
+                        .id(resource.getId())
+                        .name(resource.getName())
+                        .type(resource.getType())
+                        .description(resource.getDescription())
+                        .location(resource.getLocation())
+                        .capacity(resource.getCapacity())
+                        .readiness("AVAILABLE")
+                        .build());
+            }
+        }
+        for (Kit kit : matchingKits) {
+            List<Resource> resources = kit.getResources() == null ? List.of()
+                    : kit.getResources().stream().sorted(Comparator.comparing(Resource::getId)).toList();
+            if (!resources.isEmpty()
+                    && determineStatus(start, end, now, resources, conflictsByResource, held)
+                            == SlotStatus.AVAILABLE) {
+                results.add(AvailabilitySearchResponseDTO.ResultDTO.builder()
+                        .targetType("KIT")
+                        .id(kit.getId())
+                        .name(kit.getName())
+                        .type("PROJECT_KIT")
+                        .description(kit.getDescription())
+                        .includedResourceCount(resources.size())
+                        .readiness("READY")
+                        .build());
+            }
+        }
+        results.sort(Comparator.comparing(
+                AvailabilitySearchResponseDTO.ResultDTO::getName, String.CASE_INSENSITIVE_ORDER));
+
+        return AvailabilitySearchResponseDTO.builder()
+                .startTime(start)
+                .endTime(end)
+                .results(results)
+                .build();
+    }
+
     private List<SlotDTO> buildSlots(
             LocalDateTime start,
             LocalDateTime end,
@@ -155,6 +264,18 @@ public class AvailabilityService {
             LocalDateTime now,
             List<Resource> resources,
             Map<Long, List<Booking>> conflictsByResource) {
+        return determineStatus(slotStart, slotEnd, now, resources, conflictsByResource,
+                resourceId -> waitlistService.hasActiveOfferConflict(
+                        resourceId, slotStart, slotEnd, now));
+    }
+
+    private SlotStatus determineStatus(
+            LocalDateTime slotStart,
+            LocalDateTime slotEnd,
+            LocalDateTime now,
+            List<Resource> resources,
+            Map<Long, List<Booking>> conflictsByResource,
+            Predicate<Long> heldOfferConflict) {
         if (!slotStart.isAfter(now)) {
             return SlotStatus.PAST;
         }
@@ -178,12 +299,39 @@ public class AvailabilityService {
                     }
                 }
             }
-            if (waitlistService.hasActiveOfferConflict(
-                    resource.getId(), slotStart, slotEnd, now)) {
+            if (heldOfferConflict.test(resource.getId())) {
                 return SlotStatus.HELD;
             }
         }
         return pending ? SlotStatus.PENDING : SlotStatus.AVAILABLE;
+    }
+
+    private boolean matchesType(Resource resource, String requestedType) {
+        return switch (requestedType) {
+            case "ROOM", "LAB" -> requestedType.equalsIgnoreCase(resource.getType());
+            case "EQUIPMENT" -> !"ROOM".equalsIgnoreCase(resource.getType())
+                    && !"LAB".equalsIgnoreCase(resource.getType());
+            default -> true;
+        };
+    }
+
+    private boolean matchesCapacity(Resource resource, String requestedType, Integer minCapacity) {
+        if (minCapacity == null || !("ANY".equals(requestedType)
+                || "ROOM".equals(requestedType) || "LAB".equals(requestedType))) {
+            return true;
+        }
+        if (!"ROOM".equalsIgnoreCase(resource.getType()) && !"LAB".equalsIgnoreCase(resource.getType())) {
+            return true;
+        }
+        return resource.getCapacity() != null && resource.getCapacity() >= minCapacity;
+    }
+
+    private boolean matchesKeyword(String query, String... values) {
+        if (query.isEmpty()) return true;
+        for (String value : values) {
+            if (value != null && value.toLowerCase(Locale.ROOT).contains(query)) return true;
+        }
+        return false;
     }
 
     private String labelFor(SlotStatus status) {

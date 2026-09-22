@@ -22,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -208,6 +209,23 @@ public class WaitlistService {
         Resource resource = lockResource(resourceId);
         reevaluateExpiredOfferIntervalsLocked(
                 resource, expireOffersForResourceLocked(resource, now), now);
+    }
+
+    /** Expires offers only for searched resources that actually have expired offers. */
+    @Transactional
+    public void processExpiredOffersForResources(Collection<Long> resourceIds, LocalDateTime now) {
+        if (resourceIds == null || resourceIds.isEmpty()) return;
+        List<Long> expiredResourceIds = waitlistRepository.findResourceIdsWithExpiredOffers(
+                resourceIds.stream().distinct().sorted().toList(), now);
+        expiredResourceIds.stream().sorted().forEach(id -> processExpiredOffersForResource(id, now));
+    }
+
+    /** Returns resource IDs held by an active offer for one search interval. */
+    public Set<Long> getResourceIdsWithActiveOfferConflicts(
+            Collection<Long> resourceIds, LocalDateTime start, LocalDateTime end, LocalDateTime now) {
+        if (resourceIds == null || resourceIds.isEmpty()) return Set.of();
+        return Set.copyOf(waitlistRepository.findResourceIdsWithActiveOffersOverlapping(
+                resourceIds.stream().distinct().sorted().toList(), start, end, now));
     }
 
     /** Returns an aggregate-only view for the read-only Admin waitlist table. */
