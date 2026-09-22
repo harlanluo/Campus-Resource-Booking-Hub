@@ -108,6 +108,20 @@ class CoreWorkflowIntegrationTest {
     }
 
     @Test
+    @DisplayName("Student Project Kit detail uses the safe catalogue DTO")
+    void kitDetailReturnsOnlyCatalogueAndOperationalData() throws Exception {
+        mockMvc.perform(get("/api/kits/1")
+                        .with(user("alice_student").roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Media Production Kit"))
+                .andExpect(jsonPath("$.itemCount").value(3))
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items[0].status").exists())
+                .andExpect(jsonPath("$.ownerId").doesNotExist())
+                .andExpect(jsonPath("$.bookings").doesNotExist());
+    }
+
+    @Test
     @DisplayName("Admin resource creation persists and returns location and capacity")
     void resourceCreationPersistsMetadata() throws Exception {
         String name = "Metadata Test Lab";

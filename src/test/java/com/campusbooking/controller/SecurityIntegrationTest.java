@@ -51,6 +51,10 @@ class SecurityIntegrationTest {
     void protectedApiRequiresAuthentication() throws Exception {
         mockMvc.perform(get("/api/resources"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/kits"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/kits/1"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

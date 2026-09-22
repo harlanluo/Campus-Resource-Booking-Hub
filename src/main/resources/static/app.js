@@ -22,6 +22,7 @@ const state = {
   adminWaitlistOverview: [],
   activeTab: 'home',
   activeNavKey: 'home',
+  contextRoute: null,
   filterType: 'ALL',
   filterOnlyAvailable: false,
   searchQuery: '',
@@ -261,6 +262,10 @@ const elements = {
 
   // Browse Tab
   resourcesGrid: document.getElementById('resourcesGrid'),
+  resourcesCatalogueView: document.getElementById('resourcesCatalogueView'),
+  resourceDetailPage: document.getElementById('resourceDetailPage'),
+  resourceDetailContent: document.getElementById('resourceDetailContent'),
+  resourceDetailBackBtn: document.getElementById('resourceDetailBackBtn'),
   resourceSearchInput: document.getElementById('resourceSearchInput'),
   typeFilters: document.getElementById('typeFilters'),
   onlyAvailableToggle: document.getElementById('onlyAvailableToggle'),
@@ -307,15 +312,13 @@ const elements = {
   adminWaitlistCountBadge: document.getElementById('adminWaitlistCountBadge'),
 
   // Booking Modal
-  bookingModalBackdrop: document.getElementById('bookingModalBackdrop'),
-  closeBookingModalBtn: document.getElementById('closeBookingModalBtn'),
+  weeklyAvailabilityPage: document.getElementById('weeklyAvailabilityPage'),
+  availabilityPageBackBtn: document.getElementById('availabilityPageBackBtn'),
   cancelBookingModalBtn: document.getElementById('cancelBookingModalBtn'),
   bookingForm: document.getElementById('bookingForm'),
   bookingResourceId: document.getElementById('bookingResourceId'),
   bookingIsKit: document.getElementById('bookingIsKit'),
   bookingKitId: document.getElementById('bookingKitId'),
-  kitItemsPreview: document.getElementById('kitItemsPreview'),
-  kitItemsChipsList: document.getElementById('kitItemsChipsList'),
   groupMemberInput: document.getElementById('groupMemberInput'),
   addGroupMemberBtn: document.getElementById('addGroupMemberBtn'),
   groupMembersTagsContainer: document.getElementById('groupMembersTagsContainer'),
@@ -323,14 +326,18 @@ const elements = {
   bookingEndTime: document.getElementById('bookingEndTime'),
   modalBookingTitle: document.getElementById('modalBookingTitle'),
   modalResourceSubtitle: document.getElementById('modalResourceSubtitle'),
-  modalResourceIcon: document.getElementById('modalResourceIcon'),
   modalUserName: document.getElementById('modalUserName'),
   modalDurationPreview: document.getElementById('modalDurationPreview'),
   modalSelectedDate: document.getElementById('modalSelectedDate'),
   modalSelectedTime: document.getElementById('modalSelectedTime'),
   selectionValidation: document.getElementById('selectionValidation'),
-  modalResourceDescription: document.getElementById('modalResourceDescription'),
   modalOperationalStatus: document.getElementById('modalOperationalStatus'),
+  availabilitySummaryName: document.getElementById('availabilitySummaryName'),
+  availabilitySummaryLocationRow: document.getElementById('availabilitySummaryLocationRow'),
+  availabilitySummaryLocationLabel: document.getElementById('availabilitySummaryLocationLabel'),
+  availabilitySummaryLocation: document.getElementById('availabilitySummaryLocation'),
+  availabilitySummaryCapacityRow: document.getElementById('availabilitySummaryCapacityRow'),
+  availabilitySummaryCapacity: document.getElementById('availabilitySummaryCapacity'),
   scheduleWeekLabel: document.getElementById('scheduleWeekLabel'),
   scheduleState: document.getElementById('scheduleState'),
   scheduleDaysGrid: document.getElementById('scheduleDaysGrid'),
@@ -1219,9 +1226,19 @@ async function showAuthenticatedShell(identity) {
   elements.app.hidden = false;
   elements.app.setAttribute('aria-hidden', 'false');
   updateRoleBasedVisibility();
-  const route = getRouteForRole(state.currentUser.role, window.location.hash.slice(1));
-  switchTab(route.tabId, { navKey: route.navKey, history: 'replace', skipLoad: true });
+  const contextualRoute = state.currentUser.role === 'STUDENT'
+    ? parseContextualRoute(window.location.hash.slice(1))
+    : null;
+  const route = contextualRoute
+    ? { tabId: 'browse', navKey: 'resources' }
+    : getRouteForRole(state.currentUser.role, window.location.hash.slice(1));
+  switchTab(route.tabId, {
+    navKey: route.navKey,
+    history: contextualRoute ? 'none' : 'replace',
+    skipLoad: true
+  });
   await loadAllData();
+  if (contextualRoute) renderContextualRoute(contextualRoute, { focus: false, refreshAvailability: true });
 }
 
 async function handleLoginSubmit(event) {
@@ -1329,6 +1346,49 @@ function getRouteForRole(role, routeKey) {
     : { ...STUDENT_ROUTES.home, navKey: 'home' };
 }
 
+function parseContextualRoute(routeKey) {
+  const match = /^(resource-detail|weekly-availability)\/(resource|kit)\/(\d+)$/.exec(routeKey || '');
+  if (!match) return null;
+  return {
+    page: match[1] === 'resource-detail' ? 'detail' : 'availability',
+    entityType: match[2],
+    id: Number(match[3])
+  };
+}
+
+function contextualRouteKey(route) {
+  const page = route.page === 'detail' ? 'resource-detail' : 'weekly-availability';
+  return `${page}/${route.entityType}/${route.id}`;
+}
+
+function setBrowseContextView(view) {
+  elements.resourcesCatalogueView.hidden = view !== 'catalogue';
+  elements.resourceDetailPage.hidden = view !== 'detail';
+  elements.weeklyAvailabilityPage.hidden = view !== 'availability';
+  state.contextRoute = view === 'catalogue' ? null : state.contextRoute;
+}
+
+function navigateToContextRoute(route, options = {}) {
+  if (!state.currentUser || state.currentUser.role !== 'STUDENT') return;
+  const historyMode = options.history || 'push';
+  if (historyMode !== 'none') {
+    const method = historyMode === 'replace' ? 'replaceState' : 'pushState';
+    const routeKey = contextualRouteKey(route);
+    window.history[method]({
+      appView: 'resources',
+      contextualRoute: route,
+      previousContextRoute: state.contextRoute
+    }, '',
+      `${window.location.pathname}${window.location.search}#${routeKey}`);
+  }
+  switchTab('browse', { navKey: 'resources', history: 'none', skipLoad: true });
+  renderContextualRoute(route, {
+    focus: options.focus !== false,
+    forceReset: Boolean(options.forceReset),
+    refreshAvailability: options.refreshAvailability
+  });
+}
+
 function switchTab(tabId, options = {}) {
   if (!state.currentUser) return;
   const isAdmin = state.currentUser.role === 'ADMIN';
@@ -1386,6 +1446,8 @@ function switchTab(tabId, options = {}) {
     panel.setAttribute('aria-hidden', active ? 'false' : 'true');
   });
 
+  if (tabId === 'browse' && options.history !== 'none') setBrowseContextView('catalogue');
+
   if (isAdmin) {
     const route = ADMIN_ROUTES[navKey];
     document.querySelectorAll('[data-admin-view]').forEach((view) => {
@@ -1412,10 +1474,22 @@ function switchTab(tabId, options = {}) {
 function restoreNavigationFromHistory() {
   if (!state.currentUser) return;
   const routeKey = window.location.hash.slice(1);
+  const contextualRoute = state.currentUser.role === 'STUDENT'
+    ? parseContextualRoute(routeKey)
+    : null;
+  if (contextualRoute) {
+    switchTab('browse', { navKey: 'resources', history: 'none', skipLoad: true });
+    renderContextualRoute(contextualRoute, { focus: false, refreshAvailability: true });
+    return;
+  }
   const route = getRouteForRole(state.currentUser.role, routeKey);
   const validRoute = state.currentUser.role === 'ADMIN'
     ? Boolean(ADMIN_ROUTES[routeKey])
     : Boolean(STUDENT_ROUTES[routeKey]);
+  if (state.currentUser.role === 'STUDENT' && route.navKey === 'resources') {
+    state.contextRoute = null;
+    setBrowseContextView('catalogue');
+  }
   switchTab(route.tabId, { navKey: route.navKey, history: validRoute ? 'none' : 'replace' });
 }
 
@@ -2266,7 +2340,6 @@ function kitIsReady(kit) {
 function renderResourceCard(resource) {
   const card = document.createElement('article');
   const isRoomOrLab = resource.type === 'ROOM' || resource.type === 'LAB';
-  const isAvailable = resource.status === 'AVAILABLE';
   const typeClass = resource.type === 'ROOM' ? 'room' : resource.type === 'LAB' ? 'lab' : 'equipment';
   const imagePath = isRoomOrLab ? RESOURCE_IMAGE_BY_NAME[resource.name] : null;
   const image = isRoomOrLab
@@ -2280,9 +2353,7 @@ function renderResourceCard(resource) {
       ? `<div class="catalogue-meta-item"><span>Capacity</span><strong>${escapeHtml(resource.capacity)} people</strong></div>`
       : ''
   ].filter(Boolean).join('');
-  const actions = isAvailable
-    ? `<button class="btn btn-primary btn-sm book-btn" type="button" aria-label="Book ${escapeHtml(resource.name)}">Book</button>`
-    : '<span class="resource-action-note">Not operational right now</span>';
+  const actions = `<button class="btn btn-primary btn-sm view-details-btn" type="button" aria-label="View details for ${escapeHtml(resource.name)}">View details</button>`;
   const reportIssue = state.currentUser.role !== 'ADMIN'
     ? `<button class="btn btn-ghost btn-sm report-issue-btn" type="button" aria-label="Report an issue with ${escapeHtml(resource.name)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4m0 3h.01"/></svg><span>Report issue</span></button>`
     : '';
@@ -2303,8 +2374,9 @@ function renderResourceCard(resource) {
     <div class="resource-card-actions catalogue-card-actions">${actions}${reportIssue}</div>
   `;
 
-  const bookButton = card.querySelector('.book-btn');
-  if (bookButton) bookButton.addEventListener('click', () => openBookingModal(resource));
+  card.querySelector('.view-details-btn').addEventListener('click', () =>
+    navigateToContextRoute({ page: 'detail', entityType: 'resource', id: resource.id })
+  );
   const issueButton = card.querySelector('.report-issue-btn');
   if (issueButton) issueButton.addEventListener('click', () => openIssueModal(resource));
   return card;
@@ -2327,11 +2399,155 @@ function renderKitCard(kit) {
       <p class="catalogue-kit-count">${count} included ${count === 1 ? 'resource' : 'resources'}</p>
     </div>
     <div class="resource-card-actions catalogue-card-actions">
-      <button class="btn btn-primary btn-sm book-kit-btn" type="button" aria-label="Reserve ${escapeHtml(kit.name)}">Reserve kit</button>
+      <button class="btn btn-primary btn-sm view-kit-btn" type="button" aria-label="View ${escapeHtml(kit.name)}">View kit</button>
     </div>
   `;
-  card.querySelector('.book-kit-btn').addEventListener('click', () => openKitBookingModal(kit));
+  card.querySelector('.view-kit-btn').addEventListener('click', () =>
+    navigateToContextRoute({ page: 'detail', entityType: 'kit', id: kit.id })
+  );
   return card;
+}
+
+function renderContextualRoute(route, options = {}) {
+  if (!route || state.currentUser?.role !== 'STUDENT') return;
+  const collection = route.entityType === 'kit' ? state.kits : state.resources;
+  const item = collection.find((candidate) => Number(candidate.id) === Number(route.id));
+  if (!item) {
+    if (route.page === 'availability') {
+      switchTab('browse', { navKey: 'resources', history: 'replace', skipLoad: true });
+      showToast('Item unavailable', 'This resource or Project Kit is no longer in the catalogue.', 'warning');
+      return;
+    }
+    state.contextRoute = route;
+    setBrowseContextView('detail');
+    elements.resourceDetailContent.innerHTML = `
+      <div class="empty-state context-not-found" role="status">
+        <h1 class="page-title" id="resourceDetailPageHeading" tabindex="-1">Item not found</h1>
+        <p>This resource or Project Kit is no longer in the catalogue.</p>
+      </div>
+    `;
+    elements.mobileWorkspaceTitle.textContent = 'Resource details';
+    if (options.focus !== false) elements.resourceDetailContent.querySelector('h1')?.focus();
+    return;
+  }
+
+  state.contextRoute = route;
+  if (route.page === 'detail') {
+    setBrowseContextView('detail');
+    elements.mobileWorkspaceTitle.textContent = route.entityType === 'kit' ? 'Project Kit details' : 'Resource details';
+    if (route.entityType === 'kit') renderKitDetailPage(item);
+    else renderResourceDetailPage(item);
+    if (options.focus !== false) elements.resourceDetailContent.querySelector('h1')?.focus();
+    return;
+  }
+
+  setBrowseContextView('availability');
+  prepareAvailabilityTarget(route, item, options.forceReset);
+  if (options.refreshAvailability) loadAvailability();
+  if (options.focus !== false) elements.modalBookingTitle.focus();
+}
+
+function renderResourceDetailPage(resource) {
+  const isRoomOrLab = resource.type === 'ROOM' || resource.type === 'LAB';
+  const image = isRoomOrLab
+    ? catalogueImageMarkup(RESOURCE_IMAGE_BY_NAME[resource.name], `${resource.name} image`, resource.type)
+    : `<div class="resource-detail-equipment-icon" role="img" aria-label="Equipment icon for ${escapeHtml(resource.name)}">${equipmentIconSvg(resource.name)}</div>`;
+  const metadata = [
+    resource.location
+      ? `<div class="resource-detail-meta-item"><dt>${resource.type === 'EQUIPMENT' ? 'Pickup location' : 'Location'}</dt><dd>${escapeHtml(resource.location)}</dd></div>`
+      : '',
+    resource.capacity != null
+      ? `<div class="resource-detail-meta-item"><dt>Capacity</dt><dd>${escapeHtml(resource.capacity)} people</dd></div>`
+      : ''
+  ].filter(Boolean).join('');
+
+  elements.resourceDetailContent.innerHTML = `
+    <article class="resource-detail-content">
+      <header class="resource-detail-hero">
+        <div class="resource-detail-artwork ${isRoomOrLab ? '' : 'equipment-artwork'}">${image}</div>
+        <div class="resource-detail-heading">
+          <div class="resource-detail-status-row">
+            <span class="type-badge ${escapeHtml(resource.type)}">${escapeHtml(getResourceTypeLabel(resource.type))}</span>
+            <span class="status-badge ${escapeHtml(resource.status)}"><span class="dot"></span><span>${escapeHtml(getResourceStatusLabel(resource.status))}</span></span>
+          </div>
+          <h1 class="page-title" id="resourceDetailPageHeading" tabindex="-1">${escapeHtml(resource.name)}</h1>
+          <dl class="resource-detail-metadata">${metadata}</dl>
+          <div class="resource-detail-actions">
+            <button class="btn btn-primary" type="button" id="resourceDetailAvailabilityBtn">Check availability</button>
+            <button class="btn btn-secondary resource-detail-report-btn" type="button" id="resourceDetailReportIssueBtn">Report issue</button>
+          </div>
+        </div>
+      </header>
+      <section class="resource-detail-description" aria-labelledby="resourceAboutHeading">
+        <h2 id="resourceAboutHeading">About this ${resource.type === 'EQUIPMENT' ? 'equipment' : 'resource'}</h2>
+        <p>${escapeHtml(resource.description || 'No detailed description is available for this resource.')}</p>
+      </section>
+    </article>
+  `;
+
+  bindCatalogueImageFallbacks(elements.resourceDetailContent);
+  elements.resourceDetailContent.querySelector('#resourceDetailAvailabilityBtn')?.addEventListener('click', () =>
+    navigateToContextRoute({ page: 'availability', entityType: 'resource', id: resource.id }, {
+      forceReset: true,
+      refreshAvailability: true
+    })
+  );
+  elements.resourceDetailContent.querySelector('#resourceDetailReportIssueBtn')?.addEventListener('click', () =>
+    openIssueModal(resource)
+  );
+}
+
+function renderKitDetailPage(kit) {
+  const items = Array.isArray(kit.items) ? kit.items : [];
+  const ready = kitIsReady(kit);
+  const itemCount = Number(kit.itemCount ?? items.length);
+  const itemMarkup = items.length
+    ? items.map((item) => `
+        <li class="kit-detail-resource-item">
+          <div>
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${escapeHtml(getResourceTypeLabel(item.type))}</span>
+          </div>
+          <span class="status-badge ${escapeHtml(item.status)}"><span class="dot"></span><span>${escapeHtml(getResourceStatusLabel(item.status))}</span></span>
+        </li>
+      `).join('')
+    : '<li class="kit-detail-empty">No included resources are listed for this Project Kit.</li>';
+
+  elements.resourceDetailContent.innerHTML = `
+    <article class="kit-detail-content">
+      <header class="resource-detail-hero kit-detail-hero">
+        <div class="resource-detail-artwork kit-detail-artwork">${catalogueImageMarkup(KIT_IMAGE_BY_NAME[kit.name], `${kit.name} image`, 'KIT')}</div>
+        <div class="resource-detail-heading">
+          <div class="resource-detail-status-row">
+            <span class="type-badge KIT">Project Kit</span>
+            <span class="status-badge ${ready ? 'AVAILABLE' : 'UNAVAILABLE'}"><span class="dot"></span><span>${ready ? 'Ready' : 'Limited readiness'}</span></span>
+          </div>
+          <h1 class="page-title" id="resourceDetailPageHeading" tabindex="-1">${escapeHtml(kit.name)}</h1>
+          <p class="kit-detail-purpose">${escapeHtml(kit.description || 'Pre-configured equipment bundle for a student project.')}</p>
+          <div class="kit-detail-count">${itemCount} included ${itemCount === 1 ? 'resource' : 'resources'}</div>
+          ${ready ? '' : '<p class="kit-readiness-note" role="status">One or more included resources are not operational. This limits when the complete Kit can be reserved.</p>'}
+          <div class="resource-detail-actions">
+            <button class="btn btn-primary" type="button" id="kitDetailAvailabilityBtn">Reserve this kit</button>
+          </div>
+        </div>
+      </header>
+      <section class="kit-detail-resources" aria-labelledby="kitResourcesHeading">
+        <div class="kit-detail-section-heading">
+          <div><h2 id="kitResourcesHeading">Included resources</h2><p>Each listed item must be operational for the Kit to be ready.</p></div>
+          <span class="kit-detail-count-badge">${itemCount}</span>
+        </div>
+        <ul class="kit-detail-resource-list">${itemMarkup}</ul>
+      </section>
+    </article>
+  `;
+
+  bindCatalogueImageFallbacks(elements.resourceDetailContent);
+  elements.resourceDetailContent.querySelector('#kitDetailAvailabilityBtn')?.addEventListener('click', () =>
+    navigateToContextRoute({ page: 'availability', entityType: 'kit', id: kit.id }, {
+      forceReset: true,
+      refreshAvailability: true
+    })
+  );
 }
 
 
@@ -3177,95 +3393,65 @@ function renderAdminIssuesTable() {
 // Actions & Handlers
 // ============================================================================
 
-// Availability-first Booking Modal
-async function openBookingModal(resource) {
-  state.selectedResourceForBooking = resource;
-  state.selectedKitForBooking = null;
-  state.selectedGroupMembers = [];
-  resetBookingSuccessState();
-
-  elements.bookingIsKit.value = 'false';
-  elements.bookingKitId.value = '';
-  elements.bookingResourceId.value = resource.id;
-
-  elements.modalBookingTitle.textContent = `Reserve ${resource.name}`;
-  elements.modalResourceSubtitle.textContent = `${resource.name} · ${getResourceTypeLabel(resource.type)}`;
+function prepareAvailabilityTarget(route, item, forceReset = false) {
+  const sameTarget = route.entityType === 'kit'
+    ? Number(state.selectedKitForBooking?.id) === Number(item.id)
+    : Number(state.selectedResourceForBooking?.id) === Number(item.id);
+  state.selectedKitForBooking = route.entityType === 'kit' ? item : null;
+  state.selectedResourceForBooking = route.entityType === 'resource' ? item : null;
+  elements.bookingIsKit.value = String(route.entityType === 'kit');
+  elements.bookingKitId.value = route.entityType === 'kit' ? item.id : '';
+  elements.bookingResourceId.value = route.entityType === 'resource' ? item.id : '';
+  elements.modalBookingTitle.textContent = `${item.name} — Availability`;
+  elements.modalResourceSubtitle.textContent = route.entityType === 'kit'
+    ? `Project Kit · ${Number(item.itemCount ?? (item.items || []).length)} included resources`
+    : getResourceTypeLabel(item.type);
   elements.modalUserName.textContent = state.currentUser.name;
-  elements.modalResourceDescription.textContent = resource.description || 'No detailed specifications provided.';
-  setOperationalStatus(resource.status);
+  elements.availabilitySummaryName.textContent = route.entityType === 'kit'
+    ? `Project Kit · ${item.name}`
+    : item.name;
 
-  const typeIcons = { ROOM: '🏢', LAB: '💻', EQUIPMENT: '📽️' };
-  elements.modalResourceIcon.textContent = typeIcons[resource.type] || '🏛️';
+  const status = route.entityType === 'kit'
+    ? (kitIsReady(item) ? 'AVAILABLE' : 'UNAVAILABLE')
+    : item.status;
+  setOperationalStatus(status);
+  elements.availabilitySummaryLocationRow.hidden = route.entityType === 'kit' || !item.location;
+  elements.availabilitySummaryLocationLabel.textContent = item.type === 'EQUIPMENT' ? 'Pickup location' : 'Location';
+  elements.availabilitySummaryLocation.textContent = item.location || '';
+  elements.availabilitySummaryCapacityRow.hidden = route.entityType === 'kit' || item.capacity == null;
+  elements.availabilitySummaryCapacity.textContent = item.capacity == null ? '' : `${item.capacity} people`;
+  elements.mobileWorkspaceTitle.textContent = 'Availability';
+  const heading = document.getElementById('availabilityHeading');
+  if (heading) heading.textContent = route.entityType === 'kit' ? 'Choose an available Kit time' : 'Choose an available time';
 
-  // Hide Kit items preview
-  elements.kitItemsPreview.style.display = 'none';
-
-  // Reset & Render group member tags
-  if (elements.groupMemberInput) elements.groupMemberInput.value = '';
-  renderGroupMemberTags();
-
-  // Hide conflict banner from any previous attempt
-  elements.conflictBanner.style.display = 'none';
-
-  initialiseScheduleSelection();
-  openManagedModal(elements.bookingModalBackdrop, elements.closeBookingModalBtn, closeBookingModal);
-  await loadAvailability();
-}
-
-async function openKitBookingModal(kit) {
-  state.selectedKitForBooking = kit;
-  state.selectedResourceForBooking = null;
-  state.selectedGroupMembers = [];
-  resetBookingSuccessState();
-
-  elements.bookingIsKit.value = 'true';
-  elements.bookingKitId.value = kit.id;
-  elements.bookingResourceId.value = '';
-
-  elements.modalBookingTitle.textContent = `Reserve ${kit.name}`;
-  elements.modalResourceSubtitle.textContent = `Project Kit · ${kit.itemCount} ${kit.itemCount === 1 ? 'item' : 'items'}`;
-  elements.modalResourceIcon.textContent = '📦';
-  elements.modalUserName.textContent = state.currentUser.name;
-  elements.modalResourceDescription.textContent = kit.description || 'Pre-configured project equipment bundle.';
-  const allOperational = kit.items && kit.items.every((item) => item.status === 'AVAILABLE');
-  setOperationalStatus(allOperational ? 'AVAILABLE' : 'UNAVAILABLE');
-
-  // Display bundled items list in modal
-  elements.kitItemsPreview.style.display = 'block';
-  elements.kitItemsChipsList.innerHTML = kit.items
-    ? kit.items
-        .map(
-          (item) => `
-        <span class="kit-subitem-chip">
-          <span>✓</span>
-          <span>${escapeHtml(item.name)}</span>
-        </span>
-      `
-        )
-        .join('')
-    : '';
-
-  // Reset & Render group member tags
-  if (elements.groupMemberInput) elements.groupMemberInput.value = '';
-  renderGroupMemberTags();
-
-  // Hide conflict banner from any previous attempt
-  elements.conflictBanner.style.display = 'none';
-
-  initialiseScheduleSelection();
-  openManagedModal(elements.bookingModalBackdrop, elements.closeBookingModalBtn, closeBookingModal);
-  await loadAvailability();
+  if (forceReset || !sameTarget) {
+    state.selectedGroupMembers = [];
+    resetBookingSuccessState();
+    elements.groupMemberInput.value = '';
+    elements.conflictBanner.style.display = 'none';
+    initialiseScheduleSelection();
+    renderGroupMemberTags();
+  }
 }
 
 function closeBookingModal() {
-  resetBookingSuccessState();
-  closeManagedModal(elements.bookingModalBackdrop);
-  state.selectedResourceForBooking = null;
-  state.selectedKitForBooking = null;
-  state.selectedGroupMembers = [];
-  state.availability = null;
-  state.selectedScheduleStart = null;
-  state.selectedScheduleEnd = null;
+  const route = state.contextRoute;
+  if (route?.page === 'availability') {
+    const previousRoute = window.history.state?.previousContextRoute;
+    if (previousRoute?.page === 'detail'
+        && previousRoute.entityType === route.entityType
+        && Number(previousRoute.id) === Number(route.id)) {
+      window.history.back();
+      return;
+    }
+    navigateToContextRoute({
+      page: 'detail',
+      entityType: route.entityType,
+      id: route.id
+    }, { history: 'replace' });
+    return;
+  }
+  switchTab('browse', { navKey: 'resources' });
 }
 
 function resetBookingSuccessState() {
@@ -3392,6 +3578,8 @@ function renderAvailabilitySchedule() {
     mobileButton.type = 'button';
     mobileButton.className = `mobile-day-btn${index === state.selectedMobileDay ? ' active' : ''}`;
     mobileButton.textContent = `${day.toLocaleDateString('en-NZ', { weekday: 'short' })} ${day.getDate()}`;
+    mobileButton.setAttribute('aria-pressed', index === state.selectedMobileDay ? 'true' : 'false');
+    mobileButton.setAttribute('aria-label', `Show ${day.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })}`);
     mobileButton.addEventListener('click', () => {
       state.selectedMobileDay = index;
       renderAvailabilitySchedule();
@@ -3402,7 +3590,7 @@ function renderAvailabilitySchedule() {
     column.className = `schedule-day${index === state.selectedMobileDay ? '' : ' mobile-hidden'}`;
     column.innerHTML = `
       <div class="schedule-day-header">
-        <strong>${day.toLocaleDateString('en-NZ', { weekday: 'short' })}</strong>
+        <h3>${day.toLocaleDateString('en-NZ', { weekday: 'short' })}</h3>
         <span>${day.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}</span>
       </div>
       <div class="schedule-slots"></div>
@@ -3425,7 +3613,11 @@ function createScheduleSlot(slot) {
   const slotLabel = selected
     ? 'Selected'
     : slot.status === 'AVAILABLE' ? getStatusLabel('AVAILABLE') : getStatusLabel(slot.status);
-  button.title = `${button.textContent} — ${slotLabel}`;
+  const start = new Date(slot.startTime);
+  const end = new Date(slot.endTime);
+  const dayLabel = start.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' });
+  const timeLabel = `${start.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' })} to ${end.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' })}`;
+  button.title = `${dayLabel}, ${timeLabel} — ${slotLabel}`;
   button.setAttribute('aria-label', button.title);
   const waitlistableConflict = !elements.bookingIsKit.value.includes('true')
     && ['BOOKED', 'PENDING'].includes(slot.status);
@@ -3568,8 +3760,8 @@ function renderGroupMemberTags() {
     const tag = document.createElement('span');
     tag.className = 'member-tag';
     tag.innerHTML = `
-      <span>👤 ${escapeHtml(member.display)}</span>
-      <button type="button" class="member-tag-remove" aria-label="Remove peer">&times;</button>
+      <span>${escapeHtml(member.display)}</span>
+      <button type="button" class="member-tag-remove" aria-label="Remove ${escapeHtml(member.display)}">&times;</button>
     `;
     tag.querySelector('.member-tag-remove').addEventListener('click', () => removeGroupMember(index));
     container.appendChild(tag);
@@ -3619,12 +3811,13 @@ function updateDurationPreview() {
   elements.modalDurationPreview.textContent = formatDuration(start, end) || '—';
 
   if (!start || !end || new Date(end) <= new Date(start)) {
+    elements.bookingForm.querySelector('#submitBookingBtn').disabled = true;
     state.selectedScheduleStart = null;
     state.selectedScheduleEnd = null;
     elements.modalSelectedDate.textContent = 'Choose a slot';
     elements.modalSelectedTime.textContent = '—';
     elements.selectionValidation.className = 'selection-validation';
-    elements.selectionValidation.textContent = 'Select a green time slot to continue.';
+    elements.selectionValidation.textContent = 'Select an available time slot to continue.';
     elements.conflictBanner.style.display = 'none';
     return;
   }
@@ -3639,6 +3832,7 @@ function updateDurationPreview() {
   elements.modalSelectedTime.textContent = `${startDate.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' })} – ${endDate.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' })}`;
 
   const available = isRangeAvailable(startDate, endDate);
+  elements.bookingForm.querySelector('#submitBookingBtn').disabled = !available;
   elements.selectionValidation.className = `selection-validation ${available ? 'valid' : 'invalid'}`;
   elements.selectionValidation.textContent = available
     ? 'This displayed range is available. The server will verify it again when you book.'
@@ -3797,7 +3991,7 @@ async function handleBookingSubmit(e) {
     }
   } finally {
     submitBtn.disabled = false;
-    if (btnText) btnText.textContent = 'Confirm Booking';
+    if (btnText) btnText.textContent = 'Confirm booking';
   }
 }
 
@@ -4303,12 +4497,14 @@ function setupEventListeners() {
     renderMyBookings();
   });
 
-  // Booking Modal & DateTime Inputs
-  elements.closeBookingModalBtn.addEventListener('click', closeBookingModal);
+  // Resource-first contextual detail and availability pages.
+  elements.resourceDetailBackBtn.addEventListener('click', () =>
+    switchTab('browse', { navKey: 'resources' })
+  );
+  elements.availabilityPageBackBtn.addEventListener('click', closeBookingModal);
   elements.cancelBookingModalBtn.addEventListener('click', closeBookingModal);
   elements.closeBookingSuccessBtn.addEventListener('click', closeBookingModal);
   elements.viewBookingsFromSuccessBtn.addEventListener('click', () => {
-    closeBookingModal();
     switchTab('my-bookings', { navKey: 'bookings' });
   });
 
@@ -4396,6 +4592,7 @@ function setupEventListeners() {
 // Initialization
 // ============================================================================
 async function initApp() {
+  elements.tabBrowse.appendChild(elements.weeklyAvailabilityPage);
   setupEventListeners();
   initialiseTimeFirstSearchForm();
   await restoreSession();

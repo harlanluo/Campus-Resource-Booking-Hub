@@ -348,7 +348,9 @@
 
           <section id="timeFirstReviewSection" class="time-first-step time-first-review" aria-labelledby="timeFirstReviewTitle" hidden>
             <div class="time-first-review-heading">
-              <button type="button" class="btn btn-ghost btn-sm" id="timeFirstBackBtn">Back to results</button>
+              <button type="button" class="btn btn-ghost btn-sm context-back-button" id="timeFirstBackBtn" aria-label="Back to results">
+                <span aria-hidden="true">←</span> Back to results
+              </button>
               <div class="time-first-step-heading">
                 <span class="time-first-step-number">3</span>
                 <div><h2 id="timeFirstReviewTitle">Review your request</h2><p>Check the details before sending it for approval.</p></div>
@@ -398,6 +400,7 @@
 
       <!-- TAB 1: BROWSE RESOURCES -->
       <section id="tab-browse" class="tab-content" role="tabpanel" aria-labelledby="tabResourcesBtn">
+        <div id="resourcesCatalogueView">
         <!-- Hero Header -->
         <div class="page-header">
           <div class="header-titles">
@@ -447,6 +450,17 @@
             <p>Loading campus resources…</p>
           </div>
         </div>
+        </div>
+
+        <section class="context-page resource-detail-page" id="resourceDetailPage" hidden aria-labelledby="resourceDetailPageHeading">
+          <div class="context-page-topline">
+            <button class="btn btn-ghost btn-sm context-back-button" type="button" id="resourceDetailBackBtn" aria-label="Back to resources">
+              <span aria-hidden="true">←</span> Back to resources
+            </button>
+            <span class="section-eyebrow">Resource details</span>
+          </div>
+          <div id="resourceDetailContent" aria-live="polite"></div>
+        </section>
       </section>
 
       <!-- STUDENT BOOKINGS: UPCOMING AND HISTORY -->
@@ -788,23 +802,23 @@
     </div>
   </div>
 
-  <!-- MODAL: BOOK RESOURCE -->
-  <div class="modal-backdrop" id="bookingModalBackdrop" aria-hidden="true" tabindex="-1">
-    <div class="modal-card booking-experience-modal" role="dialog" aria-modal="true" aria-labelledby="modalBookingTitle">
-      <div class="modal-header">
-        <div class="modal-title-group">
-          <div class="modal-icon-badge" id="modalResourceIcon">🏛️</div>
-          <div>
-            <h3 class="modal-title" id="modalBookingTitle">Reserve Resource</h3>
-            <span class="modal-subtitle" id="modalResourceSubtitle">Study Room A • ROOM</span>
-          </div>
+  <!-- Resource-first weekly availability workspace; moved into Resources during app initialization. -->
+  <section class="context-page availability-page" id="weeklyAvailabilityPage" hidden aria-labelledby="modalBookingTitle">
+    <div class="availability-page-shell">
+      <header class="availability-page-header">
+        <button class="btn context-back-button" type="button" id="availabilityPageBackBtn" aria-label="Back to resource details">
+          <span aria-hidden="true">←</span> Back to resource details
+        </button>
+        <div>
+          <span class="section-eyebrow">Resource-first booking</span>
+          <h1 class="page-title" id="modalBookingTitle" tabindex="-1">Resource availability</h1>
+          <p class="page-subtitle" id="modalResourceSubtitle">Choose an available time, then review your request.</p>
         </div>
-        <button class="modal-close-btn" type="button" id="closeBookingModalBtn" aria-label="Close booking dialog">&times;</button>
-      </div>
+      </header>
 
       <!-- Conflict Alert Banner (Displayed dynamically when 409 occurs) -->
       <div class="conflict-banner" id="conflictBanner" style="display: none;">
-        <div class="conflict-icon">⚠️</div>
+        <div class="conflict-icon" aria-hidden="true">!</div>
         <div class="conflict-body">
           <h4 class="conflict-title">Time-Slot Conflict!</h4>
           <p class="conflict-text" id="conflictMessage">This resource is already booked for the selected period.</p>
@@ -816,24 +830,15 @@
         </div>
       </div>
 
-      <form id="bookingForm" class="modal-form">
+      <form id="bookingForm" class="availability-workspace-form">
         <input type="hidden" id="bookingResourceId" />
         <input type="hidden" id="bookingIsKit" value="false" />
         <input type="hidden" id="bookingKitId" />
-        
-        <!-- Kit Bundled Items List Preview (only visible when booking a kit) -->
-        <div class="kit-items-preview" id="kitItemsPreview" style="display: none;">
-          <label class="section-label">📦 Bundled Sub-Items Included:</label>
-          <div class="kit-items-chips-list" id="kitItemsChipsList">
-            <!-- Populated dynamically via JS -->
-          </div>
-        </div>
 
-        <section class="booking-resource-overview" aria-label="Resource information">
-          <div>
-            <span class="resource-detail-label">About this resource</span>
-            <p id="modalResourceDescription">Resource details will appear here.</p>
-          </div>
+        <div class="availability-layout">
+          <div class="availability-main-column">
+
+        <section class="availability-status-row" aria-label="Current operational status">
           <span class="status-badge AVAILABLE" id="modalOperationalStatus">
             <span class="dot"></span>
             <span>Operational</span>
@@ -844,8 +849,8 @@
           <div class="availability-heading-row">
             <div>
               <span class="step-kicker">Step 1</span>
-              <h4 id="availabilityHeading">Choose an available time</h4>
-              <p>Click one slot for 30 minutes, then a later free slot to extend the booking.</p>
+              <h2 id="availabilityHeading">Choose an available time</h2>
+              <p>Select a free start slot, then a later free slot to extend the interval.</p>
             </div>
             <button type="button" class="btn btn-ghost btn-sm" id="clearSlotSelectionBtn">Clear selection</button>
           </div>
@@ -868,7 +873,7 @@
             <span><i class="legend-swatch maintenance"></i>Maintenance / unavailable</span>
           </div>
 
-          <div class="mobile-day-selector" id="mobileDaySelector" aria-label="Select schedule day"></div>
+          <div class="mobile-day-selector" id="mobileDaySelector" role="group" aria-label="Select schedule day"></div>
           <div class="schedule-state" id="scheduleState" role="status">Loading availability…</div>
           <div class="schedule-days-grid" id="scheduleDaysGrid" aria-label="Resource availability schedule"></div>
         </section>
@@ -896,58 +901,77 @@
           </div>
         </details>
 
+          </div>
+          <aside class="availability-summary-panel" aria-label="Booking summary">
+            <div class="availability-summary-heading">
+              <div><span class="step-kicker">Step 2</span><h2>Review your request</h2></div>
+              <span class="approval-expectation">Requires Admin approval</span>
+            </div>
+            <div class="availability-summary-resource">
+              <span>Booking</span>
+              <strong id="availabilitySummaryName">Choose a resource</strong>
+            </div>
+
         <!-- Collaborative Group Members Section -->
         <div class="form-group group-members-section">
-          <label for="groupMemberInput">👥 Add Group Members (Student IDs or Usernames)</label>
+          <label for="groupMemberInput">Add group members (Student IDs or usernames)</label>
           <div class="group-member-input-row">
             <input type="text" id="groupMemberInput" placeholder="Enter student ID (e.g. 2) or username..." autocomplete="off" />
             <button type="button" class="btn btn-secondary btn-sm" id="addGroupMemberBtn">
-              <span>+ Add Peer</span>
+              <span>+ Add member</span>
             </button>
           </div>
           <div class="group-members-tags" id="groupMembersTagsContainer">
             <!-- Dynamic tags will appear here -->
           </div>
-          <span class="form-help-text">Invite peers to collaborate on this reservation. All members will see this in their shared bookings.</span>
+          <span class="form-help-text">Invited peers will see this in their shared bookings.</span>
         </div>
 
         <div class="booking-summary-box">
-          <div class="summary-heading">
-            <span class="step-kicker">Step 2</span>
-            <strong>Review your booking</strong>
-          </div>
           <div class="summary-line">
-            <span>Date:</span>
+            <span>Date</span>
             <strong id="modalSelectedDate">Choose a slot</strong>
           </div>
           <div class="summary-line">
-            <span>Time:</span>
+            <span>Time</span>
             <strong id="modalSelectedTime">—</strong>
           </div>
           <div class="summary-line">
-            <span>Booking User:</span>
-            <strong id="modalUserName">Alice Student</strong>
+            <span>Requested by</span>
+            <strong id="modalUserName">Student</strong>
           </div>
           <div class="summary-line">
-            <span>Estimated Duration:</span>
+            <span>Duration</span>
             <strong id="modalDurationPreview">—</strong>
           </div>
-          <p class="selection-validation" id="selectionValidation">Select a green time slot to continue.</p>
+          <div class="summary-line availability-summary-meta" id="availabilitySummaryLocationRow" hidden>
+            <span id="availabilitySummaryLocationLabel">Location</span>
+            <strong id="availabilitySummaryLocation">—</strong>
+          </div>
+          <div class="summary-line availability-summary-meta" id="availabilitySummaryCapacityRow" hidden>
+            <span>Capacity</span>
+            <strong id="availabilitySummaryCapacity">—</strong>
+          </div>
+          <p class="selection-validation" id="selectionValidation" role="status">Select an available time slot to continue.</p>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-ghost" id="cancelBookingModalBtn">Cancel</button>
+        <div class="availability-submit-row">
+          <button type="button" class="btn btn-ghost context-back-button" id="cancelBookingModalBtn" aria-label="Back to resource details">
+            <span aria-hidden="true">←</span> Back to details
+          </button>
           <button type="submit" class="btn btn-primary" id="submitBookingBtn">
-            <span class="btn-text">Confirm Booking</span>
+            <span class="btn-text">Confirm booking</span>
             <span class="btn-spinner" style="display: none;"></span>
           </button>
+        </div>
+          </aside>
         </div>
       </form>
 
       <section class="booking-success-state" id="bookingSuccessState" role="status" aria-live="polite" hidden>
         <div class="booking-success-icon" aria-hidden="true">✓</div>
         <span class="step-kicker">Request sent</span>
-        <h4 class="booking-success-title" id="bookingSuccessTitle">Your reservation request is on its way</h4>
+        <h2 class="booking-success-title" id="bookingSuccessTitle">Your reservation request is on its way</h2>
         <p class="booking-success-message" id="bookingSuccessMessage">
           An Admin will review the request before the reservation is confirmed.
         </p>
@@ -966,12 +990,14 @@
           </div>
         </div>
         <div class="modal-footer booking-success-actions">
-          <button type="button" class="btn btn-ghost" id="closeBookingSuccessBtn">Continue browsing</button>
+          <button type="button" class="btn btn-ghost context-back-button" id="closeBookingSuccessBtn" aria-label="Back to resource details">
+            <span aria-hidden="true">←</span> Back to details
+          </button>
           <button type="button" class="btn btn-primary" id="viewBookingsFromSuccessBtn">View my bookings</button>
         </div>
       </section>
     </div>
-  </div>
+  </section>
 
 
   <!-- MODAL: ADD RESOURCE (ADMIN) -->

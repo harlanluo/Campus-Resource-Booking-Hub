@@ -1721,12 +1721,12 @@ textarea:focus {
   text-align: center;
 }
 
-.schedule-day-header strong,
+.schedule-day-header h3,
 .schedule-day-header span {
   display: block;
 }
 
-.schedule-day-header strong { font-size: 0.78rem; }
+.schedule-day-header h3 { margin: 0; font-size: 0.78rem; font-weight: 750; }
 .schedule-day-header span { margin-top: 0.1rem; color: var(--slate-500); font-size: 0.68rem; }
 
 .schedule-slots {
@@ -5142,5 +5142,701 @@ summary:focus-visible {
 
   .catalogue-card-status-row {
     flex-wrap: wrap;
+  }
+}
+
+/* Task 4: contextual resource details and full-page weekly availability */
+.context-page[hidden] {
+  display: none !important;
+}
+
+.resource-detail-page,
+.availability-page {
+  min-width: 0;
+  width: 100%;
+}
+
+.context-page-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+}
+
+.btn.context-back-button {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-md);
+  background: var(--slate-50);
+  color: var(--slate-700);
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.btn.context-back-button:hover {
+  border-color: #bfdbfe;
+  background: var(--brand-blue-50);
+  color: var(--brand-blue-700);
+}
+
+.btn.context-back-button:focus-visible {
+  border-color: var(--brand-blue-600);
+  outline: 3px solid rgba(37, 99, 235, 0.38);
+  outline-offset: 2px;
+}
+
+.resource-detail-content,
+.kit-detail-content {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.resource-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.88fr) minmax(0, 1.12fr);
+  align-items: stretch;
+  gap: clamp(1.25rem, 3vw, 2.4rem);
+  padding: clamp(1.1rem, 2.5vw, 2rem);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.resource-detail-artwork {
+  display: grid;
+  min-width: 0;
+  min-height: 260px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--slate-100);
+}
+
+.resource-detail-artwork .catalogue-image-frame {
+  height: 100%;
+  min-height: 260px;
+  aspect-ratio: auto;
+}
+
+.resource-detail-artwork .catalogue-image-fallback svg {
+  width: 4rem;
+  height: 4rem;
+}
+
+.resource-detail-artwork.equipment-artwork {
+  min-height: 260px;
+  color: var(--brand-blue-700);
+  background: linear-gradient(145deg, var(--brand-blue-50), var(--slate-100));
+}
+
+.resource-detail-equipment-icon {
+  display: grid;
+  width: 7.5rem;
+  height: 7.5rem;
+  place-items: center;
+  border: 1px solid var(--slate-200);
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: var(--shadow-sm);
+}
+
+.resource-detail-equipment-icon svg {
+  width: 4.2rem;
+  height: 4.2rem;
+}
+
+.resource-detail-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.resource-detail-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.resource-detail-heading .page-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.resource-detail-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 2rem;
+  margin: 1.15rem 0 0;
+}
+
+.resource-detail-meta-item {
+  min-width: 8rem;
+}
+
+.resource-detail-meta-item dt {
+  margin-bottom: 0.15rem;
+  color: var(--slate-500);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.resource-detail-meta-item dd {
+  margin: 0;
+  color: var(--slate-800);
+  font-size: 0.92rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.resource-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1.4rem;
+}
+
+.resource-detail-description {
+  max-width: 62rem;
+  padding: 0.1rem 0.2rem;
+}
+
+.resource-detail-description h2,
+.kit-detail-section-heading h2 {
+  margin: 0 0 0.4rem;
+  color: var(--slate-900);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.resource-detail-description p,
+.kit-detail-purpose {
+  margin: 0;
+  color: var(--slate-600);
+  font-size: 0.94rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.kit-detail-hero {
+  grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
+}
+
+.kit-detail-count {
+  margin-top: 0.9rem;
+  color: var(--slate-700);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.kit-readiness-note {
+  max-width: 38rem;
+  margin: 0.7rem 0 0;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--amber-500);
+  color: var(--amber-700);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.kit-detail-resources {
+  padding: clamp(1rem, 2vw, 1.5rem);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  background: #fff;
+}
+
+.kit-detail-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.kit-detail-section-heading h2 {
+  margin-bottom: 0.2rem;
+}
+
+.kit-detail-section-heading p {
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 0.82rem;
+}
+
+.kit-detail-count-badge {
+  display: grid;
+  min-width: 2rem;
+  min-height: 2rem;
+  place-items: center;
+  border: 1px solid var(--slate-200);
+  border-radius: 50%;
+  color: var(--slate-700);
+  background: var(--slate-50);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.kit-detail-resource-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kit-detail-resource-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--slate-100);
+}
+
+.kit-detail-resource-item:last-child {
+  border-bottom: 0;
+}
+
+.kit-detail-resource-item > div {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.kit-detail-resource-item strong {
+  color: var(--slate-800);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.kit-detail-resource-item > div > span {
+  color: var(--slate-500);
+  font-size: 0.75rem;
+}
+
+.kit-detail-empty {
+  padding: 1rem 0;
+  color: var(--slate-600);
+  font-size: 0.86rem;
+}
+
+.availability-page-shell {
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+}
+
+.availability-page-header {
+  display: grid;
+  justify-items: start;
+  gap: 0.9rem;
+  padding-bottom: 1.15rem;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.availability-page-header .page-title {
+  margin: 0.2rem 0 0;
+}
+
+.availability-page-header .page-subtitle {
+  margin: 0.35rem 0 0;
+}
+
+.availability-workspace-form {
+  min-width: 0;
+  padding-top: 1.25rem;
+}
+
+.availability-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(295px, 345px);
+  align-items: start;
+  gap: clamp(1rem, 2vw, 1.6rem);
+}
+
+.availability-main-column,
+.availability-summary-panel {
+  min-width: 0;
+}
+
+.availability-status-row {
+  margin: 0 0 0.8rem;
+}
+
+.availability-section {
+  margin-bottom: 1rem;
+}
+
+.availability-heading-row h2,
+.availability-summary-heading h2 {
+  margin: 0;
+  color: var(--slate-900);
+  font-family: var(--font-display);
+  font-size: 1.06rem;
+}
+
+.availability-heading-row p {
+  margin-top: 0.28rem;
+}
+
+.schedule-days-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.schedule-day {
+  min-width: 0;
+}
+
+.schedule-day-header {
+  padding-inline: 0.2rem;
+}
+
+.schedule-slot {
+  min-height: 35px;
+  font-size: 0.7rem;
+}
+
+.schedule-slot:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid rgba(37, 99, 235, 0.4);
+  outline-offset: 1px;
+}
+
+.mobile-day-btn {
+  min-height: 42px;
+}
+
+.availability-summary-panel {
+  position: sticky;
+  top: 1rem;
+  padding: 1.1rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.availability-summary-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.approval-expectation {
+  flex: 0 0 auto;
+  max-width: 9.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--slate-200);
+  border-radius: 999px;
+  color: var(--brand-blue-700);
+  background: var(--brand-blue-50);
+  font-size: 0.68rem;
+  font-weight: 750;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.availability-summary-resource {
+  display: grid;
+  gap: 0.15rem;
+  margin: 1rem 0 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.availability-summary-resource span {
+  color: var(--slate-500);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.availability-summary-resource strong {
+  color: var(--slate-900);
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.availability-summary-panel .booking-summary-box {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.availability-summary-panel .summary-line {
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.availability-summary-panel .summary-line > span {
+  flex: 0 0 5rem;
+  color: var(--slate-500);
+}
+
+.availability-summary-panel .summary-line > strong {
+  min-width: 0;
+  color: var(--slate-800);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.availability-summary-panel .selection-validation {
+  margin: 0.2rem 0 0;
+}
+
+.availability-summary-panel .group-members-section {
+  margin: 1rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--slate-200);
+}
+
+.availability-summary-panel .group-members-section > label {
+  font-size: 0.78rem;
+}
+
+.availability-summary-panel .group-member-input-row {
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+}
+
+.availability-summary-panel .group-member-input-row input {
+  min-width: 0;
+  font-size: 0.78rem;
+}
+
+.availability-summary-panel .group-member-input-row .btn {
+  flex: 0 0 auto;
+}
+
+.availability-submit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--slate-200);
+}
+
+.availability-submit-row .btn {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding-inline: 0.55rem;
+  font-size: 0.78rem;
+  white-space: normal;
+}
+
+.availability-page .booking-success-state {
+  min-height: 50vh;
+  overflow: visible;
+}
+
+.availability-page .booking-success-title {
+  margin: 0.35rem 0 0;
+}
+
+.availability-page .booking-success-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1200px) {
+  .availability-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .availability-summary-panel {
+    position: static;
+  }
+
+  .schedule-days-grid {
+    gap: 0.35rem;
+  }
+
+  .schedule-slots {
+    padding: 0.2rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .resource-detail-hero,
+  .kit-detail-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-detail-artwork,
+  .resource-detail-artwork.equipment-artwork,
+  .resource-detail-artwork .catalogue-image-frame {
+    min-height: 230px;
+    max-height: 320px;
+  }
+
+  .availability-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mobile-day-selector {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.3rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .schedule-days-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-day.mobile-hidden {
+    display: none;
+  }
+
+  .schedule-slot {
+    min-height: 42px;
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .context-page-topline {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .btn.context-back-button {
+    min-height: 2.75rem;
+    padding-inline: 0.8rem;
+  }
+
+  .time-first-review-heading > .context-back-button {
+    align-self: flex-start;
+  }
+
+  .resource-detail-hero,
+  .kit-detail-resources {
+    padding: 0.9rem;
+  }
+
+  .resource-detail-artwork,
+  .resource-detail-artwork.equipment-artwork,
+  .resource-detail-artwork .catalogue-image-frame {
+    min-height: 205px;
+  }
+
+  .resource-detail-actions {
+    width: 100%;
+  }
+
+  .resource-detail-actions .btn {
+    flex: 1 1 auto;
+    min-height: 2.75rem;
+  }
+
+  .schedule-toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+  }
+
+  .schedule-week-label {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .schedule-toolbar > #previousWeekBtn {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .schedule-nav-actions {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .schedule-nav-btn {
+    min-height: 2.65rem;
+    padding-inline: 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  .schedule-legend {
+    gap: 0.5rem 0.75rem;
+    font-size: 0.68rem;
+  }
+
+  .mobile-day-btn {
+    min-width: 0;
+    min-height: 2.75rem;
+    padding-inline: 0.1rem;
+    font-size: 0.65rem;
+  }
+
+  .kit-detail-resource-item {
+    align-items: flex-start;
+  }
+
+  .kit-detail-resource-item .status-badge {
+    flex: 0 0 auto;
+    font-size: 0.67rem;
+  }
+
+  .availability-summary-panel {
+    padding: 0.9rem;
+  }
+
+  .availability-submit-row {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    margin: 0;
+    padding: 0.7rem 0.9rem max(0.7rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--slate-200);
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 -8px 18px rgba(15, 23, 42, 0.07);
+  }
+
+  .availability-workspace-form {
+    padding-bottom: 5.5rem;
+  }
+
+  .availability-submit-row .btn {
+    min-height: 2.8rem;
+    font-size: 0.73rem;
+  }
+
+  .availability-submit-row .context-back-button {
+    padding-inline: 0.4rem;
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+
+  .availability-page .booking-success-details {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
