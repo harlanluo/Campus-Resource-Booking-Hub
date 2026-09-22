@@ -7,80 +7,227 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=10.1" />
+  <link rel="stylesheet" href="style.css?v=11.0" />
 </head>
 <body>
-  <!-- App Shell -->
-  <div id="app" class="app-container">
-    
-    <!-- Top Navigation Bar -->
-    <header class="navbar">
-      <div class="nav-brand">
-        <div class="brand-icon">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Public authentication entry point. The authenticated shell stays hidden until /me succeeds. -->
+  <section id="authScreen" class="auth-screen" aria-labelledby="authTitle">
+    <div class="auth-layout">
+      <div class="auth-intro">
+        <div class="auth-brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
-            <path d="M6 6h10"/>
-            <path d="M6 10h10"/>
-            <path d="M6 14h6"/>
+            <path d="M6 6h10M6 10h10M6 14h6"/>
           </svg>
         </div>
-        <div class="brand-text">
-          <span class="brand-title">Campus Booking Hub</span>
-          <span class="brand-badge">Rooms, labs &amp; equipment</span>
-        </div>
+        <p class="auth-kicker">Campus Booking Hub</p>
+        <h1 id="authTitle">Campus Resource Booking Hub</h1>
+        <p class="auth-lead">Book study rooms, labs and equipment in one place.</p>
+        <p class="auth-description">Find the right space, choose an available time, and keep every reservation in one clear workspace.</p>
+        <ul class="auth-benefits" aria-label="Campus Booking Hub features">
+          <li><span class="auth-benefit-icon" aria-hidden="true">✓</span><span>See availability before you request a booking</span></li>
+          <li><span class="auth-benefit-icon" aria-hidden="true">✓</span><span>Track approvals, waitlist offers and history</span></li>
+          <li><span class="auth-benefit-icon" aria-hidden="true">✓</span><span>Keep Project Kit and resource reservations together</span></li>
+        </ul>
       </div>
 
-      <!-- Navigation Tabs -->
-      <nav class="nav-tabs" id="navTabs" role="tablist">
-        <button class="nav-tab active" type="button" data-tab="browse" id="tabBrowseBtn" role="tab" aria-selected="true" aria-controls="tab-browse">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="7"/>
-            <rect x="14" y="3" width="7" height="7"/>
-            <rect x="14" y="14" width="7" height="7"/>
-            <rect x="3" y="14" width="7" height="7"/>
-          </svg>
-          <span>Browse Resources</span>
-        </button>
-        <button class="nav-tab" type="button" data-tab="my-bookings" id="tabMyBookingsBtn" role="tab" aria-selected="false" aria-controls="tab-my-bookings">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-          <span>My bookings</span>
-          <span class="tab-pill" id="myBookingsCount">0</span>
-        </button>
-        <button class="nav-tab" type="button" data-tab="admin" id="tabAdminBtn" role="tab" aria-selected="false" aria-controls="tab-admin" style="display: none;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          </svg>
-          <span>Admin workspace</span>
-          <span class="tab-pill warning" id="adminPendingCount">0</span>
-        </button>
-      </nav>
+      <div class="auth-panel">
+        <div class="auth-panel-heading">
+          <p class="section-eyebrow">Welcome</p>
+          <h2 id="authPanelTitle">Sign in to continue</h2>
+          <p id="authPanelDescription">Use your campus account to access your booking workspace.</p>
+        </div>
 
-      <!-- Assessment account switcher -->
-      <div class="nav-actions">
-        <div class="user-switcher-container">
-          <label for="userSelect" class="sr-only">Switch User</label>
-          <div class="user-pill">
-            <div class="user-avatar" id="currentUserAvatar">A</div>
-            <span class="user-switcher-label">Demo account</span>
-            <select id="userSelect" class="user-dropdown" aria-label="Select active user">
-              <option value="1" data-username="alice_student" data-role="STUDENT" data-name="Alice Student" data-email="alice@campus.edu">Alice · Student</option>
-              <option value="2" data-username="bob_admin" data-role="ADMIN" data-name="Bob Admin" data-email="bob@campus.edu">Bob · Admin</option>
-            </select>
+        <div class="auth-mode-switch" role="tablist" aria-label="Account access options">
+          <button class="auth-mode-btn active" type="button" id="signInModeBtn" role="tab" aria-selected="true" aria-controls="loginForm">Sign in</button>
+          <button class="auth-mode-btn" type="button" id="registerModeBtn" role="tab" aria-selected="false" aria-controls="registerForm">Create account</button>
+        </div>
+
+        <div id="authNotice" class="auth-notice" role="alert" hidden></div>
+
+        <form id="loginForm" class="auth-form" novalidate>
+          <div class="form-group">
+            <label for="authLoginUsername">Username</label>
+            <input type="text" id="authLoginUsername" name="username" autocomplete="username" required />
+          </div>
+          <div class="form-group">
+            <label for="authLoginPassword">Password</label>
+            <input type="password" id="authLoginPassword" name="password" autocomplete="current-password" required />
+          </div>
+          <button type="submit" class="btn btn-primary auth-submit-btn" id="loginSubmitBtn">
+            <span class="btn-text">Sign in</span><span class="btn-spinner" hidden></span>
+          </button>
+        </form>
+
+        <form id="registerForm" class="auth-form" novalidate hidden>
+          <div class="form-group">
+            <label for="authRegisterUsername">Username</label>
+            <input type="text" id="authRegisterUsername" name="username" autocomplete="username" minlength="3" maxlength="50" required />
+            <span class="form-help-text">Use 3–50 characters.</span>
+          </div>
+          <div class="form-group">
+            <label for="authRegisterEmail">Email</label>
+            <input type="email" id="authRegisterEmail" name="email" autocomplete="email" maxlength="100" required />
+          </div>
+          <div class="form-row auth-form-row">
+            <div class="form-group">
+              <label for="authRegisterPassword">Password</label>
+              <input type="password" id="authRegisterPassword" name="password" autocomplete="new-password" minlength="8" required />
+            </div>
+            <div class="form-group">
+              <label for="authRegisterConfirmPassword">Confirm password</label>
+              <input type="password" id="authRegisterConfirmPassword" name="confirmPassword" autocomplete="new-password" minlength="8" required />
+            </div>
+          </div>
+          <p class="auth-form-note">New public accounts are created as Student accounts.</p>
+          <button type="submit" class="btn btn-primary auth-submit-btn" id="registerSubmitBtn">
+            <span class="btn-text">Create student account</span><span class="btn-spinner" hidden></span>
+          </button>
+        </form>
+
+        <div class="demo-access" aria-label="Demo account access">
+          <div>
+            <span class="demo-access-label">Demo access</span>
+            <p>For assessment convenience only. These buttons fill the form and still use normal sign in.</p>
+          </div>
+          <div class="demo-access-actions">
+            <button type="button" class="btn btn-secondary btn-sm demo-fill-btn" data-demo-username="alice_student" data-demo-password="password123">Use student demo</button>
+            <button type="button" class="btn btn-secondary btn-sm demo-fill-btn" data-demo-username="bob_admin" data-demo-password="password123">Use admin demo</button>
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Authenticated application shell -->
+  <div id="app" class="app-container app-shell" hidden aria-hidden="true">
+    <header class="mobile-app-header">
+      <button type="button" class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation" aria-controls="appSidebar" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="mobile-header-copy">
+        <span class="mobile-header-kicker">Campus Booking Hub</span>
+        <strong id="mobileWorkspaceTitle">Home</strong>
+      </div>
+      <div class="mobile-user-avatar" id="mobileUserAvatar" aria-hidden="true">?</div>
     </header>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
+    <div class="app-body">
+      <aside class="app-sidebar" id="appSidebar" aria-label="Application navigation">
+        <div class="sidebar-brand">
+          <div class="brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+              <path d="M6 6h10M6 10h10M6 14h6"/>
+            </svg>
+          </div>
+          <div class="brand-text"><span class="brand-title">Campus Booking Hub</span><span class="brand-badge">Rooms, labs &amp; equipment</span></div>
+        </div>
+
+        <div class="sidebar-context">
+          <span class="sidebar-context-label">Current workspace</span>
+          <strong id="sidebarWorkspaceLabel">Student workspace</strong>
+        </div>
+
+        <nav class="sidebar-nav" id="navTabs" role="navigation" aria-label="Primary">
+          <div class="nav-group student-nav-group" id="studentNavGroup">
+            <span class="nav-section-label">Student</span>
+            <button class="nav-tab active" type="button" data-tab="home" data-nav-key="home" id="tabHomeBtn" aria-current="page" aria-controls="tab-home">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>Home</span>
+            </button>
+            <button class="nav-tab" type="button" data-tab="browse" data-nav-key="resources" data-focus="resources" id="tabResourcesBtn" aria-controls="tab-browse">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>Resources</span>
+            </button>
+            <button class="nav-tab" type="button" data-tab="my-bookings" data-nav-key="bookings" id="tabMyBookingsBtn" aria-controls="tab-my-bookings">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>My bookings</span><span class="tab-pill" id="myBookingsCount">0</span>
+            </button>
+            <button class="nav-tab" type="button" data-tab="waitlist" data-nav-key="waitlist" id="tabWaitlistBtn" aria-controls="tab-waitlist">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Waitlist</span><span class="tab-pill warning" id="waitlistNavCount">0</span>
+            </button>
+          </div>
+
+          <div class="nav-group admin-nav-group" id="adminNavGroup" hidden>
+            <span class="nav-section-label">Administration</span>
+            <button class="nav-tab" type="button" data-tab="admin" data-nav-key="admin-overview" id="tabAdminBtn" aria-controls="tab-admin">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 5-6"/></svg><span>Overview</span>
+            </button>
+            <button class="nav-tab" type="button" data-tab="admin" data-nav-key="admin-requests" data-admin-focus="requests" aria-controls="tab-admin">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5M8 17h3"/></svg><span>Booking requests</span><span class="tab-pill warning" id="adminPendingCount" hidden>0</span>
+            </button>
+            <button class="nav-tab" type="button" data-tab="admin" data-nav-key="admin-reservations" data-admin-focus="reservations" aria-controls="tab-admin">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h8"/></svg><span>Reservations</span>
+            </button>
+            <button class="nav-tab" type="button" data-tab="admin" data-nav-key="admin-resources" data-admin-focus="resources" aria-controls="tab-admin">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg><span>Resources</span>
+            </button>
+            <button class="nav-tab" type="button" data-tab="admin" data-nav-key="admin-kits" data-admin-focus="kits" aria-controls="tab-admin">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg><span>Project Kits</span>
+            </button>
+            <button class="nav-tab" type="button" data-tab="admin" data-nav-key="admin-issues" data-admin-focus="issues" aria-controls="tab-admin">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.4 2.8 17a2 2 0 0 0 1.8 3h14.8a2 2 0 0 0 1.8-3L13.7 3.4a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span>Issues &amp; maintenance</span><span class="tab-pill warning" id="adminIssuesCount" hidden>0</span>
+            </button>
+          </div>
+        </nav>
+
+        <div class="sidebar-account">
+          <div class="sidebar-account-identity">
+            <div class="user-avatar" id="currentUserAvatar" aria-hidden="true">?</div>
+            <div><strong id="currentUserName">Signed out</strong><span id="currentUserRole">Account</span></div>
+          </div>
+          <button type="button" class="sidebar-logout" id="logoutBtn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 3v18"/></svg><span>Log out</span>
+          </button>
+        </div>
+      </aside>
+      <button type="button" class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close navigation" hidden></button>
+
+      <div class="workspace-shell">
+        <main class="main-content">
       
+      <!-- STUDENT HOME -->
+      <section id="tab-home" class="tab-content active" role="tabpanel" aria-labelledby="tabHomeBtn">
+        <div class="page-header home-page-header">
+          <div class="header-titles">
+            <span class="section-eyebrow">Student workspace</span>
+            <h1 class="page-title">Welcome back, <span id="homeUserName">there</span></h1>
+            <p class="page-subtitle">Keep an eye on your next reservation, approval requests, and waitlist activity.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" type="button" id="homeBrowseResourcesBtn">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              <span>Browse resources</span>
+            </button>
+          </div>
+        </div>
+
+        <section class="student-snapshot" id="studentSnapshot" aria-labelledby="studentSnapshotTitle" aria-live="polite">
+          <div class="student-snapshot-heading">
+            <div>
+              <span class="section-eyebrow">Your overview</span>
+              <h2 id="studentSnapshotTitle">A quick look at your reservations</h2>
+            </div>
+            <button class="btn btn-secondary btn-sm" type="button" id="snapshotBookingsBtn">View my bookings</button>
+          </div>
+          <div class="snapshot-grid" id="studentSnapshotGrid">
+            <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading your overview…</span></div>
+          </div>
+        </section>
+
+        <div class="home-quick-links" aria-label="Student shortcuts">
+          <button class="home-quick-link" type="button" data-home-target="resources">
+            <span class="home-quick-link-icon" aria-hidden="true">⌕</span><span><strong>Browse resources</strong><small>Find rooms, labs, equipment and kits</small></span>
+          </button>
+          <button class="home-quick-link" type="button" data-home-target="bookings">
+            <span class="home-quick-link-icon" aria-hidden="true">▣</span><span><strong>Review my bookings</strong><small>See upcoming reservations and history</small></span>
+          </button>
+          <button class="home-quick-link" type="button" data-home-target="waitlist">
+            <span class="home-quick-link-icon" aria-hidden="true">◷</span><span><strong>Check waitlist</strong><small>Respond to any available-slot offers</small></span>
+          </button>
+        </div>
+      </section>
+
       <!-- TAB 1: BROWSE RESOURCES -->
-      <section id="tab-browse" class="tab-content active" role="tabpanel" aria-labelledby="tabBrowseBtn">
+      <section id="tab-browse" class="tab-content" role="tabpanel" aria-labelledby="tabResourcesBtn">
         <!-- Hero Header -->
         <div class="page-header">
           <div class="header-titles">
@@ -98,19 +245,6 @@
             </div>
           </div>
         </div>
-
-        <section class="student-snapshot" id="studentSnapshot" aria-labelledby="studentSnapshotTitle" aria-live="polite">
-          <div class="student-snapshot-heading">
-            <div>
-              <span class="section-eyebrow">Your overview</span>
-              <h2 id="studentSnapshotTitle">A quick look at your reservations</h2>
-            </div>
-            <button class="btn btn-secondary btn-sm" type="button" id="snapshotBookingsBtn">View my bookings</button>
-          </div>
-          <div class="snapshot-grid" id="studentSnapshotGrid">
-            <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading your overview…</span></div>
-          </div>
-        </section>
 
         <!-- Filter & Search Toolbar -->
         <div class="toolbar">
@@ -145,12 +279,12 @@
         </div>
       </section>
 
-      <!-- TAB 2: MY BOOKINGS & WAITLIST -->
+      <!-- STUDENT BOOKINGS: UPCOMING AND HISTORY -->
       <section id="tab-my-bookings" class="tab-content" role="tabpanel" aria-labelledby="tabMyBookingsBtn">
         <div class="page-header">
           <div class="header-titles">
-          <h1 class="page-title">Your bookings &amp; waitlist</h1>
-          <p class="page-subtitle">See what is coming up, review past reservations, and respond to any available-slot offers.</p>
+          <h1 class="page-title">My bookings</h1>
+          <p class="page-subtitle">Review upcoming reservations that need approval or are confirmed, and browse your booking history.</p>
           </div>
           <div class="header-actions">
             <button class="btn btn-secondary" type="button" id="refreshMyBookingsBtn">
@@ -159,20 +293,6 @@
               </svg>
               <span>Refresh Schedule</span>
             </button>
-          </div>
-        </div>
-
-        <!-- Exact-slot offer explanation -->
-        <div class="info-callout">
-          <div class="callout-icon">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-          </div>
-          <div class="callout-content">
-            <strong>Exact-slot offers:</strong> Join only for a time you selected. If that same time opens, you will receive a private 15-minute offer to accept or decline. A booking request is created only after you accept.
           </div>
         </div>
 
@@ -212,8 +332,26 @@
           </div>
         </div>
 
-        <!-- Section: My Waitlist Queue -->
-        <div class="section-container" style="margin-top: 2rem;">
+      </section>
+
+      <!-- STUDENT WAITLIST AND OFFERS -->
+      <section id="tab-waitlist" class="tab-content" role="tabpanel" aria-labelledby="tabWaitlistBtn">
+        <div class="page-header">
+          <div class="header-titles">
+            <span class="section-eyebrow">Student workspace</span>
+            <h1 class="page-title">Waitlist</h1>
+            <p class="page-subtitle">Track the exact time slots you are waiting for and respond when an offer becomes available.</p>
+          </div>
+        </div>
+
+        <div class="info-callout">
+          <div class="callout-icon" aria-hidden="true">i</div>
+          <div class="callout-content">
+            <strong>Exact-slot offers:</strong> If your requested time opens, you will receive a private 15-minute offer to accept or decline. A booking request is created only after you accept.
+          </div>
+        </div>
+
+        <div class="section-container" id="myWaitlistSection" style="margin-top: 2rem;">
           <div class="section-title-bar">
             <h2 class="section-title">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -231,14 +369,15 @@
         </div>
       </section>
 
-      <!-- TAB 3: ADMIN PANEL -->
+      <!-- ADMIN WORKSPACE -->
       <section id="tab-admin" class="tab-content" role="tabpanel" aria-labelledby="tabAdminBtn">
         <div class="page-header">
           <div class="header-titles">
-          <h1 class="page-title">Admin workspace</h1>
-          <p class="page-subtitle">Keep approvals, current reservations, resources, and maintenance work moving.</p>
+          <span class="section-eyebrow">Administrator workspace</span>
+          <h1 class="page-title" id="adminPageTitle">Overview</h1>
+          <p class="page-subtitle" id="adminPageDescription">A summary of booking approvals, current reservations, inventory, and maintenance.</p>
           </div>
-          <div class="header-actions">
+          <div class="header-actions" id="adminAddResourceAction" hidden>
             <button class="btn btn-primary" type="button" id="openAddResourceModalBtn">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"/>
@@ -249,8 +388,8 @@
           </div>
         </div>
 
-        <!-- Admin Stats Overview -->
-        <div class="admin-stats-grid">
+        <!-- Overview: metrics and operational waitlist snapshot -->
+        <div class="admin-stats-grid" data-admin-view="overview">
           <div class="admin-stat-card warning">
             <div class="stat-icon">⏳</div>
             <div class="stat-info">
@@ -288,23 +427,37 @@
           </div>
         </div>
 
-        <!-- Section 1: Bookings Management & Approvals -->
-        <div class="section-container" style="margin-top: 2rem;">
+        <div class="admin-overview-grid" data-admin-view="overview">
+          <section class="section-container admin-overview-card" aria-labelledby="adminNeedsAttentionTitle">
+            <div class="section-title-bar">
+              <h2 class="section-title" id="adminNeedsAttentionTitle">Needs attention</h2>
+            </div>
+            <div class="admin-overview-list" id="adminNeedsAttentionList" aria-live="polite">
+              <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading actions…</span></div>
+            </div>
+          </section>
+          <section class="section-container admin-overview-card" aria-labelledby="adminUpcomingReservationsTitle">
+            <div class="section-title-bar">
+              <h2 class="section-title" id="adminUpcomingReservationsTitle">Upcoming reservations</h2>
+            </div>
+            <div class="admin-overview-list" id="adminUpcomingReservationsList" aria-live="polite">
+              <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading reservations…</span></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Booking requests: pending reservations only -->
+        <div class="section-container" id="adminRequestsSection" data-admin-view="requests" style="margin-top: 2rem;">
           <div class="section-title-bar">
-            <div class="title-with-filter">
               <h2 class="section-title">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                   <circle cx="8.5" cy="7" r="4"/>
                   <polyline points="17 11 19 13 23 9"/>
                 </svg>
-                <span>Booking approvals</span>
+                <span>Pending booking requests</span>
               </h2>
-            </div>
-            <div class="admin-filter-pills">
-              <button class="pill-btn warning active" type="button" data-admin-filter="PENDING">Awaiting decision (<span id="countPendingAdminBookings">0</span>)</button>
-              <button class="pill-btn success" type="button" data-admin-filter="APPROVED">Approved / current (<span id="countApprovedAdminBookings">0</span>)</button>
-            </div>
+            <span class="count-badge"><span id="countPendingAdminBookings">0</span> awaiting decision</span>
           </div>
 
           <div class="table-responsive">
@@ -326,8 +479,31 @@
           </div>
         </div>
 
-        <!-- Section 2: Read-only Waitlist Operations Overview -->
-        <div class="section-container" style="margin-top: 2.5rem;">
+        <!-- Reservations: approved/current records and standard booking history -->
+        <div class="section-container" id="adminReservationsSection" data-admin-view="reservations" style="margin-top: 2rem;">
+          <div class="section-title-bar">
+            <h2 class="section-title">Approved and current reservations</h2>
+            <span class="count-badge" id="adminReservationsCountBadge">0 reservations</span>
+          </div>
+          <p class="booking-view-description">Current approved reservations are shown first, followed by closed and expired booking history.</p>
+          <div class="table-responsive">
+            <table class="admin-table" id="adminReservationsTable">
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>User</th>
+                  <th>Reservation</th>
+                  <th>Time</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="adminReservationsTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Overview: read-only waitlist operations snapshot -->
+        <div class="section-container" id="adminWaitlistSection" data-admin-view="overview" style="margin-top: 2.5rem;">
           <div class="section-title-bar">
             <h2 class="section-title">
               <span>⏱️</span>
@@ -356,7 +532,7 @@
         </div>
 
         <!-- Section 3: Resource Inventory Management -->
-        <div class="section-container" style="margin-top: 2.5rem;">
+        <div class="section-container" id="adminResourcesSection" data-admin-view="resources" style="margin-top: 2.5rem;">
           <div class="section-title-bar">
             <h2 class="section-title">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -385,8 +561,18 @@
           </div>
         </div>
 
-        <!-- Section 4: Reported Resource Issues -->
-        <div class="section-container" style="margin-top: 2.5rem;">
+        <!-- Project Kit catalogue and configuration -->
+        <div class="section-container" id="adminKitsSection" data-admin-view="kits" style="margin-top: 2.5rem;">
+          <div class="section-title-bar">
+            <h2 class="section-title">Project Kit catalogue</h2>
+            <span class="count-badge" id="adminKitCountBadge">0 kits</span>
+          </div>
+          <button type="button" class="admin-kit-request-link" id="adminKitRequestsLink" data-nav-to-admin="admin-requests" hidden></button>
+          <div class="admin-kit-catalogue" id="adminKitCatalogue"></div>
+        </div>
+
+        <!-- Reported resource issues -->
+        <div class="section-container" id="adminIssuesSection" data-admin-view="issues" style="margin-top: 2.5rem;">
           <div class="section-title-bar">
             <h2 class="section-title">
               <span>⚠️</span>
@@ -416,17 +602,19 @@
         </div>
       </section>
 
-    </main>
+        </main>
 
-    <!-- Footer -->
-    <footer class="app-footer">
-      <div class="footer-content">
-        <p><strong>Campus Booking Hub</strong> • Reserve campus spaces, labs, and equipment.</p>
-        <div class="footer-links">
-          <span id="quickStatsFooter">Choose a resource to get started.</span>
-        </div>
+        <!-- Footer -->
+        <footer class="app-footer">
+          <div class="footer-content">
+            <p><strong>Campus Booking Hub</strong> • Reserve campus spaces, labs, and equipment.</p>
+            <div class="footer-links">
+              <span id="quickStatsFooter">Choose a resource to get started.</span>
+            </div>
+          </div>
+        </footer>
       </div>
-    </footer>
+    </div>
   </div>
 
   <!-- MODAL: BOOK RESOURCE -->
@@ -718,6 +906,6 @@
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <!-- Main JavaScript Bundle -->
-  <script src="app.js?v=10.1"></script>
+  <script src="app.js?v=11.0"></script>
 </body>
 </html>

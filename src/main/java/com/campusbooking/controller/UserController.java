@@ -1,13 +1,15 @@
 package com.campusbooking.controller;
 
+import com.campusbooking.dto.CurrentUserResponse;
 import com.campusbooking.dto.LoginRequest;
 import com.campusbooking.dto.LoginResponse;
 import com.campusbooking.dto.RegisterRequest;
 import com.campusbooking.model.User;
 import com.campusbooking.service.UserService;
-import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -18,18 +20,20 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
- * REST controller handling user registration and simulated login.
+ * REST controller handling public account entry and authenticated session identity.
  *
  * <pre>
  * POST /api/users/register – Register a new student account
- * POST /api/users/login    – Simulate login (username + password lookup)
+ * POST /api/users/login    – Authenticate username and password
+ * GET  /api/users/me       – Return the current session identity
  * </pre>
  */
 @RestController
@@ -48,7 +52,7 @@ public class UserController {
      * <p>All self-registered users are assigned the {@code STUDENT} role automatically.</p>
      *
      * <ul>
-     *   <li>{@code 201 Created}  – user successfully created; returns the saved user object</li>
+     *   <li>{@code 201 Created}  – user successfully created; returns safe identity details</li>
      *   <li>{@code 409 Conflict} – username or email is already taken</li>
      * </ul>
      *
@@ -63,12 +67,12 @@ public class UserController {
      * </p>
      *
      * @param request registration payload
-     * @return {@code 201 Created} with the persisted {@link User}
+     * @return {@code 201 Created} with safe identity details for the new student
      */
     @PostMapping("/register")
-    public ResponseEntity<User> register(@RequestBody RegisterRequest request) {
+    public ResponseEntity<CurrentUserResponse> register(@Valid @RequestBody RegisterRequest request) {
         User created = userService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        return ResponseEntity.status(HttpStatus.CREATED).body(CurrentUserResponse.from(created));
     }
 
     /**
@@ -94,7 +98,7 @@ public class UserController {
      */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(
-            @RequestBody LoginRequest request,
+            @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
@@ -110,5 +114,11 @@ public class UserController {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED, "Invalid username or password.");
         }
+    }
+
+    /** Returns only the safe identity details associated with the current session. */
+    @GetMapping("/me")
+    public ResponseEntity<CurrentUserResponse> currentUser(Authentication authentication) {
+        return ResponseEntity.ok(userService.currentUser(authentication.getName()));
     }
 }

@@ -52,6 +52,17 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    @DisplayName("Unauthenticated visitors can load only the public application entry point")
+    void publicEntryPointIsAvailableWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/app.js"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/users/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @WithMockUser(username = "alice_student", roles = "STUDENT")
     @DisplayName("A student cannot call administrator booking operations")
     void studentCannotCallAdminBookingOperations() throws Exception {
@@ -167,12 +178,77 @@ class SecurityIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("STUDENT"))
+                .andExpect(jsonPath("$.username").value("alice_student"))
                 .andReturn()
                 .getRequest()
                 .getSession(false);
 
+        mockMvc.perform(get("/api/users/me").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("alice_student"))
+                .andExpect(jsonPath("$.role").value("STUDENT"))
+                .andExpect(jsonPath("$.password").doesNotExist());
         mockMvc.perform(get("/api/bookings/user/1").session(session))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Invalid credentials return a useful unauthorized response")
+    void invalidLoginIsRejected() throws Exception {
+        mockMvc.perform(post("/api/users/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"alice_student","password":"not-the-password"}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid username or password."));
+    }
+
+    @Test
+    @DisplayName("Public registration creates a Student identity and never returns a password")
+    void registrationCreatesStudentAccount() throws Exception {
+        mockMvc.perform(post("/api/users/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"task1_student","email":"task1_student@campus.edu","password":"strongpass123"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.username").value("task1_student"))
+                .andExpect(jsonPath("$.role").value("STUDENT"))
+                .andExpect(jsonPath("$.password").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("Registration validation rejects incomplete or malformed account details")
+    void invalidRegistrationIsRejected() throws Exception {
+        mockMvc.perform(post("/api/users/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"x","email":"not-an-email","password":"short"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isString());
+    }
+
+    @Test
+    @DisplayName("Logout invalidates the session and protected requests no longer work")
+    void logoutInvalidatesSession() throws Exception {
+        MockHttpSession session = (MockHttpSession) mockMvc.perform(post("/api/users/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"alice_student","password":"password123"}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getRequest()
+                .getSession(false);
+
+        mockMvc.perform(post("/api/users/logout").session(session))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/users/me").session(session))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/resources").session(session))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -71,10 +71,16 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/style.css", "/app.js", "/favicon.ico").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/h2-console/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/users/login", "/api/users/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/users/login", "/api/users/register", "/api/users/logout").permitAll()
                         .anyRequest().authenticated())
-                .httpBasic(Customizer.withDefaults())
                 .formLogin(form -> form.disable())
+                .logout(logout -> logout
+                        .logoutUrl("/api/users/logout")
+                        .invalidateHttpSession(true)
+                        .clearAuthentication(true)
+                        .deleteCookies("JSESSIONID")
+                        .logoutSuccessHandler((request, response, authentication) ->
+                                response.setStatus(HttpStatus.NO_CONTENT.value())))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) ->
                                 response.sendError(HttpStatus.UNAUTHORIZED.value(), "Authentication required."))

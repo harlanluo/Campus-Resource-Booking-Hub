@@ -1,5 +1,6 @@
 package com.campusbooking.service;
 
+import com.campusbooking.dto.CurrentUserResponse;
 import com.campusbooking.dto.LoginRequest;
 import com.campusbooking.dto.LoginResponse;
 import com.campusbooking.dto.RegisterRequest;
@@ -82,5 +83,14 @@ public class UserService {
                 user.getEmail(),
                 user.getRole()
         );
+    }
+
+    /** Returns the safe identity details for the current authenticated session. */
+    @Transactional(readOnly = true)
+    public CurrentUserResponse currentUser(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "Your session is no longer valid."));
+        return CurrentUserResponse.from(user);
     }
 }

@@ -7,12 +7,7 @@
 // Application State
 // ============================================================================
 const state = {
-  currentUser: {
-    id: 1,
-    name: 'Alice Student',
-    role: 'STUDENT',
-    email: 'alice@campus.edu'
-  },
+  currentUser: null,
   resources: [],
   kits: [],
   userBookings: [],
@@ -21,14 +16,15 @@ const state = {
   userKitBookingHistory: [],
   userWaitlists: [],
   adminBookings: [],
+  adminBookingHistory: [],
   adminKitBookings: [],
   adminIssues: [],
   adminWaitlistOverview: [],
-  activeTab: 'browse',
+  activeTab: 'home',
+  activeNavKey: 'home',
   filterType: 'ALL',
   filterOnlyAvailable: false,
   searchQuery: '',
-  adminBookingFilter: 'PENDING',
   bookingView: 'UPCOMING',
   selectedResourceForBooking: null,
   selectedKitForBooking: null,
@@ -41,27 +37,107 @@ const state = {
   selectedMobileDay: 0,
   resourceLoadError: null,
   kitLoadError: null,
+  resourcesLoaded: false,
+  kitsLoaded: false,
   adminLoadError: null,
+  adminHistoryLoadError: null,
+  adminDataLoaded: false,
   userDataLoaded: false,
 };
+
+const STUDENT_ROUTES = Object.freeze({
+  home: { tabId: 'home', title: 'Home' },
+  resources: { tabId: 'browse', title: 'Resources' },
+  bookings: { tabId: 'my-bookings', title: 'My bookings' },
+  waitlist: { tabId: 'waitlist', title: 'Waitlist' }
+});
+
+const ADMIN_ROUTES = Object.freeze({
+  'admin-overview': {
+    view: 'overview',
+    title: 'Overview',
+    description: 'A summary of booking activity, inventory, and work that needs attention.'
+  },
+  'admin-requests': {
+    view: 'requests',
+    title: 'Booking requests',
+    description: 'Review reservations that are waiting for an approval decision.'
+  },
+  'admin-reservations': {
+    view: 'reservations',
+    title: 'Reservations',
+    description: 'Review approved and current reservations alongside relevant booking history.'
+  },
+  'admin-resources': {
+    view: 'resources',
+    title: 'Resources',
+    description: 'Manage campus rooms, labs, equipment, and their operational status.'
+  },
+  'admin-kits': {
+    view: 'kits',
+    title: 'Project Kits',
+    description: 'Review Project Kit configurations, included resources, and readiness.'
+  },
+  'admin-issues': {
+    view: 'issues',
+    title: 'Issues & maintenance',
+    description: 'Review reported problems and track maintenance work.'
+  }
+});
 
 // ============================================================================
 // DOM Element Cache
 // ============================================================================
 const elements = {
+  // Authentication
+  authScreen: document.getElementById('authScreen'),
+  authNotice: document.getElementById('authNotice'),
+  authPanelTitle: document.getElementById('authPanelTitle'),
+  authPanelDescription: document.getElementById('authPanelDescription'),
+  signInModeBtn: document.getElementById('signInModeBtn'),
+  registerModeBtn: document.getElementById('registerModeBtn'),
+  loginForm: document.getElementById('loginForm'),
+  registerForm: document.getElementById('registerForm'),
+  authLoginUsername: document.getElementById('authLoginUsername'),
+  authLoginPassword: document.getElementById('authLoginPassword'),
+  authRegisterUsername: document.getElementById('authRegisterUsername'),
+  authRegisterEmail: document.getElementById('authRegisterEmail'),
+  authRegisterPassword: document.getElementById('authRegisterPassword'),
+  authRegisterConfirmPassword: document.getElementById('authRegisterConfirmPassword'),
+  loginSubmitBtn: document.getElementById('loginSubmitBtn'),
+  registerSubmitBtn: document.getElementById('registerSubmitBtn'),
+  demoFillBtns: document.querySelectorAll('.demo-fill-btn'),
+
   app: document.getElementById('app'),
   // Navigation & User
   navTabs: document.getElementById('navTabs'),
   tabAdminBtn: document.getElementById('tabAdminBtn'),
-  userSelect: document.getElementById('userSelect'),
+  studentNavGroup: document.getElementById('studentNavGroup'),
+  adminNavGroup: document.getElementById('adminNavGroup'),
+  mobileMenuBtn: document.getElementById('mobileMenuBtn'),
+  mobileWorkspaceTitle: document.getElementById('mobileWorkspaceTitle'),
+  mobileUserAvatar: document.getElementById('mobileUserAvatar'),
+  appSidebar: document.getElementById('appSidebar'),
+  sidebarBackdrop: document.getElementById('sidebarBackdrop'),
+  logoutBtn: document.getElementById('logoutBtn'),
   currentUserAvatar: document.getElementById('currentUserAvatar'),
+  currentUserName: document.getElementById('currentUserName'),
+  currentUserRole: document.getElementById('currentUserRole'),
+  sidebarWorkspaceLabel: document.getElementById('sidebarWorkspaceLabel'),
   myBookingsCount: document.getElementById('myBookingsCount'),
+  waitlistNavCount: document.getElementById('waitlistNavCount'),
   adminPendingCount: document.getElementById('adminPendingCount'),
+  adminIssuesCount: document.getElementById('adminIssuesCount'),
 
   // Tabs
+  tabHome: document.getElementById('tab-home'),
   tabBrowse: document.getElementById('tab-browse'),
   tabMyBookings: document.getElementById('tab-my-bookings'),
+  tabWaitlist: document.getElementById('tab-waitlist'),
   tabAdmin: document.getElementById('tab-admin'),
+  homeUserName: document.getElementById('homeUserName'),
+  homeBrowseResourcesBtn: document.getElementById('homeBrowseResourcesBtn'),
+  homeQuickLinks: document.querySelectorAll('.home-quick-link'),
 
   // Browse Tab
   resourcesGrid: document.getElementById('resourcesGrid'),
@@ -93,9 +169,18 @@ const elements = {
   statMaintenanceResources: document.getElementById('statMaintenanceResources'),
   statOpenIssues: document.getElementById('statOpenIssues'),
   adminBookingsTbody: document.getElementById('adminBookingsTbody'),
+  adminReservationsTbody: document.getElementById('adminReservationsTbody'),
+  adminReservationsCountBadge: document.getElementById('adminReservationsCountBadge'),
+  adminKitCatalogue: document.getElementById('adminKitCatalogue'),
+  adminKitCountBadge: document.getElementById('adminKitCountBadge'),
+  adminKitRequestsLink: document.getElementById('adminKitRequestsLink'),
+  adminPageTitle: document.getElementById('adminPageTitle'),
+  adminPageDescription: document.getElementById('adminPageDescription'),
+  adminNeedsAttentionList: document.getElementById('adminNeedsAttentionList'),
+  adminUpcomingReservationsList: document.getElementById('adminUpcomingReservationsList'),
+  adminAddResourceAction: document.getElementById('adminAddResourceAction'),
   adminResourcesTbody: document.getElementById('adminResourcesTbody'),
   countPendingAdminBookings: document.getElementById('countPendingAdminBookings'),
-  countApprovedAdminBookings: document.getElementById('countApprovedAdminBookings'),
   openAddResourceModalBtn: document.getElementById('openAddResourceModalBtn'),
   adminIssuesTbody: document.getElementById('adminIssuesTbody'),
   issuesCountBadge: document.getElementById('issuesCountBadge'),
@@ -239,7 +324,7 @@ function getResourceStatusLabel(status) {
 }
 
 function getRoleLabel(role) {
-  return role === 'ADMIN' ? 'Admin' : 'Student';
+  return role === 'ADMIN' ? 'Administrator' : 'Student';
 }
 
 async function responseError(response, fallbackMessage) {
@@ -259,8 +344,29 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-    if (!res.ok) throw new Error('Authentication failed');
+    if (!res.ok) throw await responseError(res, 'We could not sign you in. Check your details and try again.');
     return res.json();
+  },
+
+  async register(data) {
+    const res = await fetch('/api/users/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw await responseError(res, 'We could not create your account. Check the details and try again.');
+    return res.json();
+  },
+
+  async getCurrentUser() {
+    const res = await fetch('/api/users/me');
+    if (!res.ok) throw await responseError(res, 'No active session.');
+    return res.json();
+  },
+
+  async logout() {
+    const res = await fetch('/api/users/logout', { method: 'POST' });
+    if (!res.ok) throw await responseError(res, 'We could not sign you out. Please try again.');
   },
 
   // Resources
@@ -321,6 +427,12 @@ const api = {
   async getAllBookings() {
     const res = await fetch('/api/bookings');
     if (!res.ok) throw await responseError(res, 'Failed to fetch all bookings');
+    return res.json();
+  },
+
+  async getAdminBookingHistory() {
+    const res = await fetch('/api/bookings/history');
+    if (!res.ok) throw await responseError(res, 'Failed to fetch reservation history');
     return res.json();
   },
 
@@ -822,6 +934,10 @@ function getAdminReservationItems() {
   );
 }
 
+function isActionableAdminIssue(issue) {
+  return issue.status === 'PENDING' || issue.status === 'OPEN';
+}
+
 function getBookingDisplayStatus(booking, isHistory = false) {
   return getStatusLabel(booking.status, { history: isHistory });
 }
@@ -839,98 +955,337 @@ function getLocalIsoString(date) {
 // ============================================================================
 // Role-Based UI & Tab Management
 // ============================================================================
+function getDisplayName(username) {
+  return String(username || 'Campus user')
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function normaliseCurrentUser(identity) {
+  return {
+    id: identity.userId ?? identity.id,
+    username: identity.username,
+    name: getDisplayName(identity.username),
+    email: identity.email,
+    role: identity.role
+  };
+}
+
+function applyCurrentUser(identity) {
+  state.currentUser = normaliseCurrentUser(identity);
+  const initial = state.currentUser.name.charAt(0).toUpperCase() || '?';
+  elements.currentUserAvatar.textContent = initial;
+  elements.mobileUserAvatar.textContent = initial;
+  elements.currentUserName.textContent = state.currentUser.name;
+  elements.currentUserRole.textContent = getRoleLabel(state.currentUser.role === 'ADMIN' ? 'ADMIN' : 'STUDENT');
+  elements.modalUserName.textContent = state.currentUser.name;
+  elements.homeUserName.textContent = state.currentUser.name;
+  elements.sidebarWorkspaceLabel.textContent = state.currentUser.role === 'ADMIN'
+    ? 'Administrator workspace'
+    : 'Student workspace';
+}
+
+function setAuthNotice(message, type = 'error') {
+  elements.authNotice.textContent = message;
+  elements.authNotice.className = `auth-notice ${type}`;
+  elements.authNotice.hidden = !message;
+}
+
+function clearAuthNotice() {
+  setAuthNotice('');
+}
+
+function setAuthMode(mode, options = {}) {
+  const register = mode === 'register';
+  elements.loginForm.hidden = register;
+  elements.registerForm.hidden = !register;
+  elements.signInModeBtn.classList.toggle('active', !register);
+  elements.registerModeBtn.classList.toggle('active', register);
+  elements.signInModeBtn.setAttribute('aria-selected', register ? 'false' : 'true');
+  elements.registerModeBtn.setAttribute('aria-selected', register ? 'true' : 'false');
+  elements.authPanelTitle.textContent = register ? 'Create your student account' : 'Sign in to continue';
+  elements.authPanelDescription.textContent = register
+    ? 'Register once, then use your account to manage campus reservations.'
+    : 'Use your campus account to access your booking workspace.';
+  if (!options.keepNotice) clearAuthNotice();
+}
+
+function setAuthBusy(button, busy, busyLabel) {
+  if (!button) return;
+  button.disabled = busy;
+  const text = button.querySelector('.btn-text');
+  const spinner = button.querySelector('.btn-spinner');
+  if (text) {
+    if (busy) {
+      button.dataset.idleLabel = text.textContent;
+      text.textContent = busyLabel;
+    } else {
+      text.textContent = button.dataset.idleLabel || text.textContent;
+    }
+  }
+  if (spinner) spinner.hidden = !busy;
+}
+
+function closeMobileNavigation() {
+  elements.appSidebar.classList.remove('open');
+  elements.sidebarBackdrop.hidden = true;
+  elements.mobileMenuBtn.setAttribute('aria-expanded', 'false');
+  elements.mobileMenuBtn.setAttribute('aria-label', 'Open navigation');
+}
+
+function resetPrivateState() {
+  state.currentUser = null;
+  state.resources = [];
+  state.kits = [];
+  state.userBookings = [];
+  state.userBookingHistory = [];
+  state.userKitBookings = [];
+  state.userKitBookingHistory = [];
+  state.userWaitlists = [];
+  state.adminBookings = [];
+  state.adminBookingHistory = [];
+  state.adminKitBookings = [];
+  state.adminIssues = [];
+  state.adminWaitlistOverview = [];
+  state.activeTab = 'home';
+  state.activeNavKey = 'home';
+  state.bookingView = 'UPCOMING';
+  state.resourcesLoaded = false;
+  state.kitsLoaded = false;
+  state.resourceLoadError = null;
+  state.kitLoadError = null;
+  state.adminLoadError = null;
+  state.adminHistoryLoadError = null;
+  state.adminDataLoaded = false;
+  state.userDataLoaded = false;
+}
+
+function showAuthScreen(message = '', type = 'error') {
+  closeActiveModal();
+  resetPrivateState();
+  closeMobileNavigation();
+  elements.app.hidden = true;
+  elements.app.setAttribute('aria-hidden', 'true');
+  elements.authScreen.hidden = false;
+  setAuthMode('signin', { keepNotice: Boolean(message) });
+  setAuthNotice(message, type);
+  elements.authLoginPassword.value = '';
+}
+
+async function showAuthenticatedShell(identity) {
+  applyCurrentUser(identity);
+  elements.authScreen.hidden = true;
+  elements.app.hidden = false;
+  elements.app.setAttribute('aria-hidden', 'false');
+  updateRoleBasedVisibility();
+  const route = getRouteForRole(state.currentUser.role, window.location.hash.slice(1));
+  switchTab(route.tabId, { navKey: route.navKey, history: 'replace', skipLoad: true });
+  await loadAllData();
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const username = elements.authLoginUsername.value.trim();
+  const password = elements.authLoginPassword.value;
+  if (!username || !password) {
+    setAuthNotice('Enter your username and password to sign in.', 'error');
+    return;
+  }
+
+  clearAuthNotice();
+  setAuthBusy(elements.loginSubmitBtn, true, 'Signing in…');
+  try {
+    const identity = await api.login(username, password);
+    await showAuthenticatedShell(identity);
+  } catch (error) {
+    setAuthNotice(error.message || 'We could not sign you in. Check your details and try again.', 'error');
+  } finally {
+    setAuthBusy(elements.loginSubmitBtn, false);
+  }
+}
+
+async function handleRegisterSubmit(event) {
+  event.preventDefault();
+  const username = elements.authRegisterUsername.value.trim();
+  const email = elements.authRegisterEmail.value.trim();
+  const password = elements.authRegisterPassword.value;
+  const confirmation = elements.authRegisterConfirmPassword.value;
+
+  if (!username || !email || !password || !confirmation) {
+    setAuthNotice('Complete every field before creating your account.', 'error');
+    return;
+  }
+  if (!elements.authRegisterEmail.validity.valid) {
+    setAuthNotice('Enter a valid email address.', 'error');
+    elements.authRegisterEmail.focus();
+    return;
+  }
+  if (password.length < 8) {
+    setAuthNotice('Your password must be at least 8 characters.', 'error');
+    elements.authRegisterPassword.focus();
+    return;
+  }
+  if (password !== confirmation) {
+    setAuthNotice('The passwords do not match.', 'error');
+    elements.authRegisterConfirmPassword.focus();
+    return;
+  }
+
+  clearAuthNotice();
+  setAuthBusy(elements.registerSubmitBtn, true, 'Creating account…');
+  try {
+    await api.register({ username, email, password });
+    elements.authLoginUsername.value = username;
+    elements.authLoginPassword.value = '';
+    setAuthMode('signin', { keepNotice: true });
+    setAuthNotice('Your Student account is ready. Sign in to continue.', 'success');
+    elements.authLoginPassword.focus();
+  } catch (error) {
+    setAuthNotice(error.message || 'We could not create your account. Check the details and try again.', 'error');
+  } finally {
+    setAuthBusy(elements.registerSubmitBtn, false);
+  }
+}
+
+async function handleLogout() {
+  elements.logoutBtn.disabled = true;
+  try {
+    await api.logout();
+    showAuthScreen('You have been signed out.', 'success');
+    window.history.replaceState({}, '', `${window.location.pathname}${window.location.search}`);
+    elements.authLoginUsername.focus();
+  } catch (error) {
+    showToast('Sign out failed', error.message || 'Please try again.', 'error');
+  } finally {
+    elements.logoutBtn.disabled = false;
+  }
+}
+
 function updateRoleBasedVisibility() {
+  if (!state.currentUser) return;
   const isAdmin = state.currentUser.role === 'ADMIN';
 
-  if (elements.tabAdminBtn) {
-    elements.tabAdminBtn.style.display = isAdmin ? 'inline-flex' : 'none';
-  }
+  elements.studentNavGroup.hidden = isAdmin;
+  elements.adminNavGroup.hidden = !isAdmin;
   if (elements.studentSnapshot) {
     elements.studentSnapshot.hidden = isAdmin;
   }
 
-  // If a student is currently looking at the admin tab, switch back to browse
+  // If a student is currently looking at the admin tab, switch back to Home.
   if (!isAdmin && state.activeTab === 'admin') {
-    switchTab('browse');
+    switchTab('home', { history: 'replace' });
   }
 }
 
-function switchTab(tabId) {
-  // Role Access Guard
-  if (tabId === 'admin' && state.currentUser.role !== 'ADMIN') {
-    showToast(
-      'Access Denied',
-      'Only administrator accounts can open this workspace.',
-      'warning'
-    );
-    return;
+function getRouteForRole(role, routeKey) {
+  if (role === 'ADMIN') {
+    return ADMIN_ROUTES[routeKey]
+      ? { tabId: 'admin', navKey: routeKey }
+      : { tabId: 'admin', navKey: 'admin-overview' };
+  }
+  return STUDENT_ROUTES[routeKey]
+    ? { ...STUDENT_ROUTES[routeKey], navKey: routeKey }
+    : { ...STUDENT_ROUTES.home, navKey: 'home' };
+}
+
+function switchTab(tabId, options = {}) {
+  if (!state.currentUser) return;
+  const isAdmin = state.currentUser.role === 'ADMIN';
+  const defaultStudentRoutes = {
+    home: 'home',
+    browse: 'resources',
+    'my-bookings': 'bookings',
+    waitlist: 'waitlist'
+  };
+  let navKey = options.navKey;
+
+  if (isAdmin) {
+    navKey = ADMIN_ROUTES[navKey] ? navKey : 'admin-overview';
+    tabId = 'admin';
+  } else {
+    if (tabId === 'admin' || String(navKey || '').startsWith('admin-')) {
+      showToast('Access denied', 'Only administrator accounts can open this workspace.', 'warning');
+      return;
+    }
+    navKey = STUDENT_ROUTES[navKey] ? navKey : (defaultStudentRoutes[tabId] || 'home');
+    tabId = STUDENT_ROUTES[navKey].tabId;
   }
 
+  const routeTitle = isAdmin ? ADMIN_ROUTES[navKey].title : STUDENT_ROUTES[navKey].title;
   state.activeTab = tabId;
+  state.activeNavKey = navKey;
+  elements.mobileWorkspaceTitle.textContent = routeTitle;
+  if (options.bookingView) state.bookingView = options.bookingView;
 
+  if (options.history !== 'none') {
+    const method = options.history === 'replace' ? 'replaceState' : 'pushState';
+    if (window.location.hash.slice(1) !== navKey || options.history === 'replace') {
+      window.history[method]({ appView: navKey }, '', `${window.location.pathname}${window.location.search}#${navKey}`);
+    }
+  }
+
+  let activeNavButton = null;
   document.querySelectorAll('.nav-tab').forEach((tab) => {
-    const isActive = tab.dataset.tab === tabId;
+    const isActive = tab.dataset.navKey === navKey;
     tab.classList.toggle('active', isActive);
-    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    if (isActive) {
+      tab.setAttribute('aria-current', 'page');
+      activeNavButton = tab;
+    } else {
+      tab.removeAttribute('aria-current');
+    }
   });
 
-  elements.tabBrowse.classList.toggle('active', tabId === 'browse');
-  elements.tabMyBookings.classList.toggle('active', tabId === 'my-bookings');
-  elements.tabAdmin.classList.toggle('active', tabId === 'admin');
+  const panels = [elements.tabHome, elements.tabBrowse,
+    elements.tabMyBookings, elements.tabWaitlist, elements.tabAdmin];
+  panels.forEach((panel) => {
+    const active = panel.id === `tab-${tabId}`;
+    panel.classList.toggle('active', active);
+    panel.setAttribute('aria-hidden', active ? 'false' : 'true');
+  });
 
-  if (tabId === 'browse') renderResources();
-  if (tabId === 'my-bookings') loadUserData();
-  if (tabId === 'admin') loadAdminData();
+  if (isAdmin) {
+    const route = ADMIN_ROUTES[navKey];
+    document.querySelectorAll('[data-admin-view]').forEach((view) => {
+      view.hidden = view.dataset.adminView !== route.view;
+    });
+    elements.adminPageTitle.textContent = route.title;
+    elements.adminPageDescription.textContent = route.description;
+    elements.adminAddResourceAction.hidden = navKey !== 'admin-resources';
+    if (activeNavButton) elements.tabAdmin.setAttribute('aria-labelledby', activeNavButton.id);
+  } else {
+    elements.tabAdmin.setAttribute('aria-labelledby', 'tabAdminBtn');
+  }
+
+  if (!options.skipLoad && tabId === 'browse') renderResources();
+  if (!options.skipLoad && tabId === 'my-bookings') loadUserData();
+  if (!options.skipLoad && tabId === 'waitlist') loadMyWaitlists();
+  if (!options.skipLoad && tabId === 'admin') loadAdminData();
+  if (tabId === 'browse' && options.focus === 'resources') {
+    window.setTimeout(() => elements.resourceSearchInput?.focus(), 0);
+  }
+  closeMobileNavigation();
 }
 
-// ============================================================================
-// User Switching
-// ============================================================================
-async function handleUserChange(options = {}) {
-  const { showNotice = true, reload = true } = options;
-  const selectedOption = elements.userSelect.selectedOptions[0];
-  elements.userSelect.disabled = true;
+function restoreNavigationFromHistory() {
+  if (!state.currentUser) return;
+  const routeKey = window.location.hash.slice(1);
+  const route = getRouteForRole(state.currentUser.role, routeKey);
+  const validRoute = state.currentUser.role === 'ADMIN'
+    ? Boolean(ADMIN_ROUTES[routeKey])
+    : Boolean(STUDENT_ROUTES[routeKey]);
+  switchTab(route.tabId, { navKey: route.navKey, history: validRoute ? 'none' : 'replace' });
+}
 
+async function restoreSession() {
   try {
-    const authenticated = await api.login(selectedOption.dataset.username, 'password123');
-    state.currentUser = {
-      id: authenticated.userId,
-      role: authenticated.role,
-      name: selectedOption.dataset.name,
-      email: authenticated.email
-    };
-
-    elements.currentUserAvatar.textContent = state.currentUser.name.charAt(0);
-    elements.modalUserName.textContent = state.currentUser.name;
-
-    updateRoleBasedVisibility();
-    renderResources();
-
-    if (showNotice) {
-      showToast(
-        'Authenticated',
-        `Signed in as ${state.currentUser.name} · ${getRoleLabel(state.currentUser.role)}`,
-        'info',
-        2500
-      );
-    }
-
-    if (reload) {
-      await loadUserData();
-      if (state.currentUser.role === 'ADMIN') {
-        await loadAdminData();
-      } else {
-        state.adminBookings = [];
-        state.adminKitBookings = [];
-        state.adminIssues = [];
-        state.adminWaitlistOverview = [];
-      }
-    }
-  } catch (err) {
-    showToast('Authentication Error', err.message, 'error');
-    throw err;
-  } finally {
-    elements.userSelect.disabled = false;
+    const identity = await api.getCurrentUser();
+    await showAuthenticatedShell(identity);
+  } catch (error) {
+    // A 401 here is the normal first-visit path; do not expose API details.
+    showAuthScreen();
   }
 }
 
@@ -954,11 +1309,15 @@ async function loadResources() {
     const data = await api.getResources();
     state.resources = data;
     state.resourceLoadError = null;
+    state.resourcesLoaded = true;
     renderResources();
+    if (state.currentUser?.role === 'ADMIN' && state.adminDataLoaded) renderAdminDashboard();
     updateMetrics();
   } catch (err) {
     state.resourceLoadError = err;
+    state.resourcesLoaded = true;
     renderResources();
+    if (state.currentUser?.role === 'ADMIN' && state.adminDataLoaded) renderAdminDashboard();
     showToast('Resources unavailable', 'We could not load the campus resources.', 'error');
   }
 }
@@ -968,10 +1327,14 @@ async function loadKits() {
     const data = await api.getKits();
     state.kits = data;
     state.kitLoadError = null;
+    state.kitsLoaded = true;
     renderResources();
+    if (state.currentUser?.role === 'ADMIN' && state.adminDataLoaded) renderAdminDashboard();
   } catch (err) {
     state.kitLoadError = err;
+    state.kitsLoaded = true;
     renderResources();
+    if (state.currentUser?.role === 'ADMIN' && state.adminDataLoaded) renderAdminDashboard();
     showToast('Project Kits unavailable', 'Project Kits could not be loaded right now.', 'warning');
   }
 }
@@ -1031,9 +1394,11 @@ async function loadUserData() {
 }
 
 async function loadMyWaitlists() {
+  elements.myWaitlistList.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading your waitlist activity...</p></div>';
   try {
     state.userWaitlists = await api.getMyWaitlist();
     renderMyWaitlists();
+    updateMetrics();
     return true;
   } catch (err) {
     renderErrorState(
@@ -1050,19 +1415,26 @@ async function loadMyWaitlists() {
 async function loadAdminData() {
   const waitlistPromise = loadAdminWaitlistOverview();
   try {
-    const [allBookings, allKitBookings, allIssues] = await Promise.all([
+    const [allBookings, allKitBookings, allIssues, historyResult] = await Promise.all([
       api.getAllBookings(),
       api.getAllKitBookings(),
-      api.getIssues()
+      api.getIssues(),
+      api.getAdminBookingHistory()
+        .then((data) => ({ ok: true, data }))
+        .catch((error) => ({ ok: false, error }))
     ]);
     state.adminBookings = allBookings;
     state.adminKitBookings = allKitBookings;
     state.adminIssues = allIssues;
+    state.adminBookingHistory = historyResult.ok ? historyResult.data : [];
+    state.adminHistoryLoadError = historyResult.ok ? null : historyResult.error;
     state.adminLoadError = null;
+    state.adminDataLoaded = true;
     renderAdminDashboard();
     updateMetrics();
   } catch (err) {
     state.adminLoadError = err;
+    state.adminDataLoaded = true;
     renderAdminDashboard();
     showToast('Admin workspace unavailable', 'Some management data could not be loaded.', 'error');
   }
@@ -1097,13 +1469,26 @@ function updateMetrics() {
   const myActive = state.userBookings.length + state.userKitBookings.length;
   elements.myBookingsCount.textContent = myActive;
 
-  const adminPending = state.adminBookings.filter((b) => b.status === 'PENDING').length
-    + state.adminKitBookings.filter((b) => b.status === 'PENDING').length;
-  elements.adminPendingCount.textContent = adminPending;
+  const pendingItems = state.currentUser?.role === 'ADMIN' && !state.adminLoadError
+    ? getAdminReservationItems().filter((item) => item.data.status === 'PENDING')
+    : [];
+  updateActionBadge(elements.adminPendingCount, pendingItems.length);
+  const actionableIssues = state.currentUser?.role === 'ADMIN' && !state.adminLoadError
+    ? state.adminIssues.filter(isActionableAdminIssue).length
+    : 0;
+  updateActionBadge(elements.adminIssuesCount, actionableIssues);
+  elements.waitlistNavCount.textContent = state.userWaitlists.filter((item) =>
+    ['WAITING', 'OFFERED'].includes(item.status)).length;
 
   elements.quickStatsFooter.textContent = total
     ? `${total} resources available to browse.`
     : 'Choose a resource to get started.';
+}
+
+function updateActionBadge(element, count) {
+  if (!element) return;
+  element.textContent = String(count);
+  element.hidden = count < 1;
 }
 
 function renderStudentSnapshot() {
@@ -1754,8 +2139,15 @@ function renderAdminDashboard() {
   if (state.adminLoadError) {
     const retry = () => loadAdminData();
     renderTableState(elements.adminBookingsTbody, 6, 'Booking data is unavailable.', 'Try again to refresh the approval queue.', retry);
+    renderTableState(elements.adminReservationsTbody, 5, 'Reservation data is unavailable.', 'Try again to refresh current reservations.', retry);
     renderTableState(elements.adminResourcesTbody, 6, 'Resource data is unavailable.', 'Try again to refresh the inventory.', retry);
     renderTableState(elements.adminIssuesTbody, 7, 'Issue data is unavailable.', 'Try again to refresh maintenance work.', retry);
+    renderErrorState(elements.adminKitCatalogue, 'Project Kit catalogue is unavailable.', 'Retry to refresh the catalogue.', retry, { compact: true });
+    elements.adminKitRequestsLink.hidden = true;
+    renderErrorState(elements.adminNeedsAttentionList, 'Overview data is unavailable.', 'Retry to refresh actionable work.', retry, { compact: true });
+    renderErrorState(elements.adminUpcomingReservationsList, 'Reservations are unavailable.', 'Retry to refresh the reservation preview.', retry, { compact: true });
+    updateActionBadge(elements.adminPendingCount, 0);
+    updateActionBadge(elements.adminIssuesCount, 0);
     return;
   }
 
@@ -1767,9 +2159,7 @@ function renderAdminDashboard() {
   const approved = adminItems.filter(
     (item) => item.data.status === 'APPROVED' || item.data.status === 'CONFIRMED'
   ).length;
-  const openIssues = state.adminIssues.filter(
-    (issue) => issue.status === 'PENDING' || issue.status === 'OPEN'
-  ).length;
+  const openIssues = state.adminIssues.filter(isActionableAdminIssue).length;
 
   elements.statTotalResources.textContent = total;
   elements.statMaintenanceResources.textContent = maintenance;
@@ -1778,16 +2168,104 @@ function renderAdminDashboard() {
   elements.statOpenIssues.textContent = openIssues;
 
   elements.countPendingAdminBookings.textContent = pending;
-  elements.countApprovedAdminBookings.textContent = approved;
+  renderAdminOverview();
 
-  // Render Bookings Table
+  // Each admin destination renders only its own view content.
   renderAdminBookingsTable();
-
-  // Render Resources Table
+  renderAdminReservationsTable();
   renderAdminResourcesTable();
-
-  // Render Reported Issues Table
   renderAdminIssuesTable();
+  renderAdminKitManagement();
+}
+
+function renderAdminOverview() {
+  const pendingItems = getAdminReservationItems().filter((item) => item.data.status === 'PENDING');
+  const pendingBookings = pendingItems.filter((item) => item.kind === 'BOOKING').length;
+  const pendingKits = pendingItems.filter((item) => item.kind === 'KIT').length;
+  const maintenance = state.resourcesLoaded && !state.resourceLoadError
+    ? state.resources.filter((resource) => resource.status === 'MAINTENANCE').length
+    : null;
+  const actionableIssues = state.adminIssues.filter(isActionableAdminIssue).length;
+  const attentionItems = [
+    {
+      title: 'Resource booking requests',
+      count: pendingBookings,
+      detail: pendingBookings
+        ? `${pendingBookings} request${pendingBookings === 1 ? '' : 's'} awaiting review.`
+        : 'No resource booking requests awaiting review.',
+      route: 'admin-requests'
+    },
+    {
+      title: 'Project Kit requests',
+      count: pendingKits,
+      detail: pendingKits
+        ? `${pendingKits} Project Kit request${pendingKits === 1 ? '' : 's'} awaiting review.`
+        : 'No Project Kit requests awaiting review.',
+      route: 'admin-requests'
+    },
+    {
+      title: 'Resources in maintenance',
+      count: maintenance,
+      detail: maintenance === null
+        ? 'Resource inventory is temporarily unavailable.'
+        : maintenance
+          ? `${maintenance} resource${maintenance === 1 ? '' : 's'} currently in maintenance.`
+          : 'No resources are currently in maintenance.',
+      route: 'admin-resources'
+    },
+    {
+      title: 'Actionable issues',
+      count: actionableIssues,
+      detail: actionableIssues
+        ? `${actionableIssues} issue${actionableIssues === 1 ? '' : 's'} awaiting review or resolution.`
+        : 'No issues are awaiting review or resolution.',
+      route: 'admin-issues'
+    }
+  ];
+
+  elements.adminNeedsAttentionList.innerHTML = `
+    <div class="admin-attention-list">
+      ${attentionItems.map((item) => `
+        <button type="button" class="admin-attention-link" data-nav-to-admin="${item.route}">
+          <span class="admin-attention-copy">
+            <strong>${escapeHtml(item.title)}</strong>
+            <small>${escapeHtml(item.detail)}</small>
+          </span>
+          <span class="overview-attention-count${item.count > 0 ? ' has-work' : ''}">${item.count === null ? '—' : item.count}</span>
+        </button>
+      `).join('')}
+    </div>`;
+
+  const upcomingReservations = getAdminReservationItems()
+    .filter((item) => ['APPROVED', 'CONFIRMED'].includes(item.data.status))
+    .slice(0, 3);
+  if (upcomingReservations.length === 0) {
+    elements.adminUpcomingReservationsList.innerHTML = '<p class="admin-overview-empty">No upcoming or current approved reservations.</p>';
+    return;
+  }
+
+  elements.adminUpcomingReservationsList.innerHTML = `
+    <div class="admin-upcoming-list">
+      ${upcomingReservations.map((item) => {
+        const record = item.data;
+        const isKit = item.kind === 'KIT';
+        const title = isKit ? (record.kitName || 'Project Kit') : (record.resourceName || 'Resource reservation');
+        const reference = isKit ? (record.bookingReference || `Kit #${record.id}`) : `Booking #${record.bookingId}`;
+        const owner = isKit ? record.ownerName : record.username;
+        const status = getBookingDisplayStatus(record);
+        return `
+          <button type="button" class="admin-upcoming-link" data-nav-to-admin="admin-reservations" aria-label="View reservation for ${escapeHtml(title)}">
+            <span class="admin-upcoming-main">
+              <strong>${escapeHtml(title)}</strong>
+              <small>${escapeHtml(reference)}${owner ? ` · ${escapeHtml(owner)}` : ''}</small>
+            </span>
+            <span class="admin-upcoming-meta">
+              <time>${escapeHtml(formatDateTime(record.startTime))}</time>
+              <span class="status-pill ${escapeHtml(record.status)}">${escapeHtml(status)}</span>
+            </span>
+          </button>`;
+      }).join('')}
+    </div>`;
 }
 
 function renderAdminWaitlistOverview() {
@@ -1823,20 +2301,13 @@ function renderAdminBookingsTable() {
   const tbody = elements.adminBookingsTbody;
   tbody.innerHTML = '';
 
-  let filtered = getAdminReservationItems();
-  if (state.adminBookingFilter === 'PENDING') {
-    filtered = filtered.filter((item) => item.data.status === 'PENDING');
-  } else {
-    filtered = filtered.filter((item) => item.data.status === 'APPROVED' || item.data.status === 'CONFIRMED');
-  }
+  const filtered = getAdminReservationItems().filter((item) => item.data.status === 'PENDING');
 
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="6" style="text-align: center; color: var(--slate-500); padding: 2rem;">
-          ${state.adminBookingFilter === 'PENDING'
-            ? 'No bookings are awaiting a decision.'
-            : 'No approved or current reservations.'}
+          No bookings are awaiting a decision.
         </td>
       </tr>
     `;
@@ -1892,6 +2363,107 @@ function renderAdminBookingsTable() {
 
     tbody.appendChild(tr);
   });
+}
+
+function renderAdminReservationRow(tbody, item, isHistory = false) {
+  const booking = item.data;
+  const isKit = item.kind === 'KIT';
+  const username = isKit ? booking.ownerName : booking.username;
+  const reference = isKit
+    ? (booking.bookingReference || `Kit #${booking.id}`)
+    : `#${booking.bookingId}`;
+  const name = isKit ? (booking.kitName || 'Project Kit') : booking.resourceName;
+  const type = isKit ? 'Project Kit' : getResourceTypeLabel(booking.resourceType);
+  const status = getBookingDisplayStatus(booking, isHistory);
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><strong>${escapeHtml(reference)}</strong></td>
+    <td>${escapeHtml(username || 'Unknown user')}</td>
+    <td><span>${escapeHtml(name || 'Reservation')}</span><span class="type-badge ${isKit ? 'KIT' : escapeHtml(booking.resourceType)}">${escapeHtml(type)}</span></td>
+    <td>${formatDateTime(booking.startTime)} &rarr; ${formatDateTime(booking.endTime)}</td>
+    <td><span class="status-pill ${escapeHtml(booking.status)}">${escapeHtml(status)}</span></td>`;
+  tbody.appendChild(tr);
+}
+
+function renderAdminReservationsTable() {
+  const tbody = elements.adminReservationsTbody;
+  tbody.innerHTML = '';
+  const current = getAdminReservationItems().filter((item) =>
+    ['APPROVED', 'CONFIRMED'].includes(item.data.status)
+  );
+  const history = state.adminBookingHistory
+    .map((booking) => ({ kind: 'BOOKING', data: booking }))
+    .sort((a, b) => new Date(b.data.startTime).getTime() - new Date(a.data.startTime).getTime());
+  elements.adminReservationsCountBadge.textContent = `${current.length + history.length} ${current.length + history.length === 1 ? 'reservation' : 'reservations'}`;
+
+  if (current.length === 0 && history.length === 0 && !state.adminHistoryLoadError) {
+    tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">No approved or current reservations, or booking history.</td></tr>';
+    return;
+  }
+
+  if (current.length > 0) {
+    const heading = document.createElement('tr');
+    heading.className = 'table-section-row';
+    heading.innerHTML = '<th colspan="5" scope="colgroup">Current reservations</th>';
+    tbody.appendChild(heading);
+    current.forEach((item) => renderAdminReservationRow(tbody, item));
+  }
+
+  if (history.length > 0) {
+    const heading = document.createElement('tr');
+    heading.className = 'table-section-row';
+    heading.innerHTML = '<th colspan="5" scope="colgroup">Booking history</th>';
+    tbody.appendChild(heading);
+    history.forEach((item) => renderAdminReservationRow(tbody, item, true));
+  }
+
+  if (state.adminHistoryLoadError) {
+    const row = document.createElement('tr');
+    row.innerHTML = '<td colspan="5"><div class="table-inline-error"><span>Booking history could not be loaded.</span><button type="button" class="btn btn-secondary btn-sm">Retry</button></div></td>';
+    row.querySelector('button').addEventListener('click', () => loadAdminData());
+    tbody.appendChild(row);
+  }
+}
+
+function renderAdminKitManagement() {
+  const catalogue = elements.adminKitCatalogue;
+  catalogue.innerHTML = '';
+  elements.adminKitCountBadge.textContent = `${state.kits.length} ${state.kits.length === 1 ? 'kit' : 'kits'}`;
+  const pendingKitRequests = getAdminReservationItems().filter((item) =>
+    item.kind === 'KIT' && item.data.status === 'PENDING'
+  ).length;
+  elements.adminKitRequestsLink.hidden = pendingKitRequests === 0;
+  if (pendingKitRequests > 0) {
+    const label = `${pendingKitRequests} pending Project Kit request${pendingKitRequests === 1 ? '' : 's'} — View booking requests`;
+    elements.adminKitRequestsLink.textContent = label;
+    elements.adminKitRequestsLink.setAttribute('aria-label', label);
+  }
+
+  if (state.kitLoadError && state.kits.length === 0) {
+    renderErrorState(catalogue, 'Project Kit inventory is unavailable.', 'Try again to reload the kit catalogue.', () => loadKits(), { compact: true });
+  } else if (state.kits.length === 0) {
+    catalogue.innerHTML = '<div class="empty-state"><p class="state-title">No Project Kits in the catalogue.</p><p>Kits will appear here when they are configured for booking.</p></div>';
+  } else {
+    state.kits.forEach((kit) => {
+      const items = Array.isArray(kit.items) ? kit.items : [];
+      const operational = items.length > 0 && items.every((item) => item.status === 'AVAILABLE');
+      const includedResources = items.length > 0
+        ? `<ul class="admin-kit-item-list">${items.map((item) => `
+            <li>
+              <span>${escapeHtml(item.name)}</span>
+              <span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(getResourceStatusLabel(item.status))}</span>
+            </li>`).join('')}</ul>`
+        : '<p class="admin-kit-no-items">Included resource details are unavailable.</p>';
+      const card = document.createElement('article');
+      card.className = 'admin-kit-inventory-card';
+      card.innerHTML = `
+        <div class="admin-kit-inventory-heading"><h3>${escapeHtml(kit.name)}</h3><span class="status-pill ${operational ? 'AVAILABLE' : 'UNAVAILABLE'}">${operational ? 'Ready to book' : 'Check availability'}</span></div>
+        <p>${escapeHtml(kit.description || 'Project Kit bundle')}</p>
+        <strong class="admin-kit-included-title">Included resources</strong>
+        ${includedResources}`;
+      catalogue.appendChild(card);
+    });
+  }
 }
 
 function renderAdminKitBookingRow(tbody, kitBooking) {
@@ -3060,16 +3632,70 @@ async function handleDeleteResource(resourceId, resourceName) {
 // Event Listeners Binding
 // ============================================================================
 function setupEventListeners() {
-  // Tab Switching
+  window.addEventListener('popstate', restoreNavigationFromHistory);
+
+  // Public authentication
+  elements.signInModeBtn.addEventListener('click', () => {
+    setAuthMode('signin');
+    elements.authLoginUsername.focus();
+  });
+  elements.registerModeBtn.addEventListener('click', () => {
+    setAuthMode('register');
+    elements.authRegisterUsername.focus();
+  });
+  elements.loginForm.addEventListener('submit', handleLoginSubmit);
+  elements.registerForm.addEventListener('submit', handleRegisterSubmit);
+  elements.demoFillBtns.forEach((button) => {
+    button.addEventListener('click', () => {
+      setAuthMode('signin');
+      elements.authLoginUsername.value = button.dataset.demoUsername || '';
+      elements.authLoginPassword.value = button.dataset.demoPassword || '';
+      setAuthNotice('Demo credentials filled. Select Sign in to authenticate normally.', 'info');
+      elements.authLoginPassword.focus();
+    });
+  });
+
+  // Mobile shell navigation
+  elements.mobileMenuBtn.addEventListener('click', () => {
+    const open = elements.appSidebar.classList.toggle('open');
+    elements.sidebarBackdrop.hidden = !open;
+    elements.mobileMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    elements.mobileMenuBtn.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+  });
+  elements.sidebarBackdrop.addEventListener('click', closeMobileNavigation);
+  elements.logoutBtn.addEventListener('click', handleLogout);
+
+  // Sidebar navigation
   elements.navTabs.addEventListener('click', (e) => {
     const tabBtn = e.target.closest('.nav-tab');
     if (tabBtn && tabBtn.dataset.tab) {
-      switchTab(tabBtn.dataset.tab);
+      switchTab(tabBtn.dataset.tab, {
+        navKey: tabBtn.dataset.navKey || tabBtn.dataset.tab,
+        focus: tabBtn.dataset.focus
+      });
     }
   });
 
-  // User Select
-  elements.userSelect.addEventListener('change', () => handleUserChange());
+  elements.homeBrowseResourcesBtn.addEventListener('click', () =>
+    switchTab('browse', { navKey: 'resources', focus: 'resources' })
+  );
+  elements.homeQuickLinks.forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.homeTarget;
+      if (target === 'resources') switchTab('browse', { navKey: 'resources', focus: 'resources' });
+      if (target === 'bookings') switchTab('my-bookings', { navKey: 'bookings' });
+      if (target === 'waitlist') switchTab('waitlist', { navKey: 'waitlist' });
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    const routeLink = event.target.closest('[data-nav-to]');
+    if (routeLink?.dataset.navTo === 'resources') switchTab('browse', { navKey: 'resources' });
+    const adminRouteLink = event.target.closest('[data-nav-to-admin]');
+    if (adminRouteLink && ADMIN_ROUTES[adminRouteLink.dataset.navToAdmin]) {
+      switchTab('admin', { navKey: adminRouteLink.dataset.navToAdmin });
+    }
+  });
 
   // Search & Filters
   elements.resourceSearchInput.addEventListener('input', (e) => {
@@ -3096,7 +3722,7 @@ function setupEventListeners() {
     renderResources();
   });
 
-  elements.snapshotBookingsBtn?.addEventListener('click', () => switchTab('my-bookings'));
+  elements.snapshotBookingsBtn?.addEventListener('click', () => switchTab('my-bookings', { navKey: 'bookings' }));
 
   // My Bookings Refresh
   elements.refreshMyBookingsBtn.addEventListener('click', () => {
@@ -3116,23 +3742,13 @@ function setupEventListeners() {
     renderMyBookings();
   });
 
-  // Admin Filter Pills
-  document.querySelectorAll('.admin-filter-pills .pill-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.admin-filter-pills .pill-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.adminBookingFilter = btn.dataset.adminFilter;
-      renderAdminBookingsTable();
-    });
-  });
-
   // Booking Modal & DateTime Inputs
   elements.closeBookingModalBtn.addEventListener('click', closeBookingModal);
   elements.cancelBookingModalBtn.addEventListener('click', closeBookingModal);
   elements.closeBookingSuccessBtn.addEventListener('click', closeBookingModal);
   elements.viewBookingsFromSuccessBtn.addEventListener('click', () => {
     closeBookingModal();
-    switchTab('my-bookings');
+    switchTab('my-bookings', { navKey: 'bookings' });
   });
 
   elements.bookingStartTime.addEventListener('change', handleStartTimeChange);
@@ -3195,10 +3811,7 @@ function setupEventListeners() {
 // ============================================================================
 async function initApp() {
   setupEventListeners();
-  await handleUserChange({ showNotice: false, reload: false });
-  updateRoleBasedVisibility();
-  await loadAllData();
-  console.log('Campus Booking Hub Frontend Initialized.');
+  await restoreSession();
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
