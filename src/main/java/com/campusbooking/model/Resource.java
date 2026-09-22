@@ -1,6 +1,8 @@
 package com.campusbooking.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 /**
@@ -32,6 +34,15 @@ public class Resource {
 
     @Column(length = 500)
     private String description;
+
+    /** Campus building, level, room, or equipment pickup location. */
+    @Size(max = 160, message = "must be at most 160 characters")
+    @Column(length = 160)
+    private String location;
+
+    /** Room or lab seating capacity; equipment has no capacity. */
+    @Min(value = 1, message = "must be a positive whole number")
+    private Integer capacity;
 
     /**
      * Records whether an administrator intentionally placed this resource in

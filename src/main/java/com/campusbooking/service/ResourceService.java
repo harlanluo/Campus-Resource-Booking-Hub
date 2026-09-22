@@ -87,6 +87,8 @@ public class ResourceService {
         existing.setName(updated.getName());
         existing.setType(updated.getType());
         existing.setDescription(updated.getDescription());
+        existing.setLocation(updated.getLocation());
+        existing.setCapacity(updated.getCapacity());
         existing.setStatus(updated.getStatus());
         existing.setManualMaintenance(updated.getStatus() == Resource.Status.MAINTENANCE);
 

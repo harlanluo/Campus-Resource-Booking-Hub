@@ -2286,115 +2286,132 @@ button.schedule-slot { cursor: pointer; }
 
 .auth-screen {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: clamp(1.25rem, 4vw, 4rem);
-  background:
-    radial-gradient(circle at 12% 15%, rgba(219, 234, 254, 0.72), transparent 34%),
-    var(--slate-50);
+  padding: 0;
+  background: #ffffff;
 }
 
 .auth-layout {
-  width: min(1080px, 100%);
+  width: 100%;
+  min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
-  gap: clamp(2rem, 7vw, 7rem);
-  align-items: center;
+  grid-template-columns: minmax(0, 1.32fr) minmax(420px, 1fr);
+  align-items: stretch;
+  gap: 0;
 }
 
 .auth-intro {
-  max-width: 560px;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-width: 0;
+  min-height: 100vh;
+  align-items: flex-end;
+  overflow: hidden;
+  padding: clamp(2.25rem, 5.5vw, 5.75rem);
+  color: #ffffff;
+  background: #132e43;
+}
+
+.auth-intro::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 26, 42, 0.12), rgba(8, 26, 42, 0.2) 38%, rgba(8, 26, 42, 0.82));
+  content: '';
+}
+
+.auth-hero-image {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.auth-intro-content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 680px);
 }
 
 .auth-brand-mark {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 1.1rem;
-  border-radius: 15px;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 14px;
   color: #ffffff;
-  background: var(--brand-blue-600);
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.2);
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
 }
 
 .auth-kicker,
 .section-eyebrow {
-  color: var(--brand-blue-700);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
+.auth-kicker {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.section-eyebrow {
+  color: var(--brand-blue-700);
+}
+
 .auth-intro h1 {
-  max-width: 640px;
+  max-width: 12ch;
   margin-top: 0.55rem;
-  color: var(--slate-900);
+  color: #ffffff;
   font-family: var(--font-display);
-  font-size: clamp(2.25rem, 5vw, 4.25rem);
+  font-size: clamp(2.4rem, 4.8vw, 4.35rem);
   line-height: 1.05;
   letter-spacing: -0.055em;
 }
 
 .auth-lead {
-  max-width: 510px;
-  margin-top: 1.25rem;
-  color: var(--slate-700);
-  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  max-width: 40rem;
+  margin-top: 1rem;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: clamp(1.05rem, 1.8vw, 1.32rem);
   font-weight: 600;
+  line-height: 1.45;
 }
 
 .auth-description {
-  max-width: 500px;
+  max-width: 38rem;
   margin-top: 0.7rem;
-  color: var(--slate-500);
-  font-size: 0.98rem;
-}
-
-.auth-benefits {
-  display: grid;
-  gap: 0.8rem;
-  margin-top: 2rem;
-  list-style: none;
-  color: var(--slate-700);
-  font-size: 0.9rem;
-}
-
-.auth-benefits li {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-}
-
-.auth-benefit-icon {
-  width: 1.45rem;
-  height: 1.45rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  color: var(--emerald-700);
-  background: var(--emerald-100);
-  font-size: 0.75rem;
-  font-weight: 800;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.92rem;
+  line-height: 1.55;
 }
 
 .auth-panel {
-  padding: clamp(1.25rem, 3vw, 2rem);
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-xl);
-  background: #ffffff;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.1);
+  display: grid;
+  align-content: center;
+  width: min(100%, 480px);
+  min-height: 100vh;
+  margin-inline: auto;
+  padding: clamp(2rem, 4.8vw, 4.5rem);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .auth-panel-heading h2 {
   margin-top: 0.35rem;
   color: var(--slate-900);
   font-family: var(--font-display);
-  font-size: 1.45rem;
+  font-size: 1.62rem;
   letter-spacing: -0.03em;
 }
 
@@ -2511,8 +2528,8 @@ button.schedule-slot { cursor: pointer; }
 .demo-access {
   display: grid;
   gap: 0.7rem;
-  margin-top: 1.35rem;
-  padding-top: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1.05rem;
   border-top: 1px solid var(--slate-200);
 }
 
@@ -2809,32 +2826,34 @@ button.schedule-slot { cursor: pointer; }
 
 @media (max-width: 900px) {
   .auth-layout {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-    max-width: 560px;
+    grid-template-columns: minmax(0, 1fr);
+    max-width: none;
+    gap: 0;
   }
 
   .auth-intro {
-    max-width: none;
-    text-align: center;
+    min-height: clamp(250px, 34vh, 340px);
+    padding: 2rem clamp(1.25rem, 6vw, 4rem);
   }
 
-  .auth-intro h1,
-  .auth-lead,
-  .auth-description {
-    margin-left: auto;
-    margin-right: auto;
+  .auth-intro-content {
+    width: min(100%, 640px);
+    margin-inline: auto;
+  }
+
+  .auth-intro h1 {
+    max-width: 14ch;
+    font-size: clamp(2rem, 5vw, 3.25rem);
   }
 
   .auth-brand-mark {
     margin-bottom: 0.7rem;
   }
 
-  .auth-benefits {
-    max-width: 440px;
-    margin-left: auto;
-    margin-right: auto;
-    text-align: left;
+  .auth-panel {
+    width: min(100%, 560px);
+    min-height: auto;
+    padding: 2rem clamp(1.5rem, 6vw, 3.25rem);
   }
 
   .app-body {
@@ -2943,29 +2962,96 @@ button.schedule-slot { cursor: pointer; }
 @media (max-width: 600px) {
   .auth-screen {
     display: block;
-    padding: 1rem 0.75rem 2rem;
+    padding: 0;
   }
 
   .auth-layout {
-    padding-top: 1rem;
+    min-height: 100vh;
+  }
+
+  .auth-intro {
+    min-height: clamp(220px, 30vh, 270px);
+    padding: 1.15rem 1.1rem 1.2rem;
+  }
+
+  .auth-intro-content {
+    width: 100%;
+  }
+
+  .auth-brand-mark {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 0.6rem;
+  }
+
+  .auth-brand-mark svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .auth-kicker {
+    font-size: 0.64rem;
   }
 
   .auth-intro h1 {
-    font-size: 2.1rem;
+    max-width: 16ch;
+    margin-top: 0.35rem;
+    font-size: clamp(1.75rem, 7vw, 2.15rem);
+  }
+
+  .auth-lead {
+    margin-top: 0.55rem;
+    font-size: 0.94rem;
+  }
+
+  .auth-description {
+    display: -webkit-box;
+    margin-top: 0.35rem;
+    overflow: hidden;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .auth-panel {
-    padding: 1rem;
-    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 560px;
+    margin-inline: auto;
+    padding: 1.35rem 1rem 1.5rem;
+  }
+
+  .auth-panel-heading h2 {
+    font-size: 1.38rem;
+  }
+
+  .auth-mode-switch {
+    margin: 1.1rem 0 1rem;
+  }
+
+  .auth-form {
+    gap: 0.8rem;
   }
 
   .auth-form-row {
     grid-template-columns: 1fr;
   }
 
-  .demo-access-actions,
+  .demo-access {
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+
+  .demo-access-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
   .demo-access-actions .btn {
     width: 100%;
+    min-width: 0;
+    padding-inline: 0.45rem;
   }
 
   .workspace-shell .main-content {
@@ -4161,5 +4247,293 @@ summary:focus-visible {
 
   .admin-upcoming-meta time {
     white-space: normal;
+  }
+}
+
+/* Resource catalogue: separated categories with image-led room, lab, and kit cards. */
+.resources-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.25rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.filter-chips {
+  flex-wrap: wrap;
+}
+
+.catalogue-section,
+.catalogue-card-grid {
+  min-width: 0;
+}
+
+.catalogue-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.catalogue-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.catalogue-section-heading h2 {
+  margin: 0;
+  color: var(--slate-900);
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  font-weight: 700;
+}
+
+.catalogue-section-heading p {
+  margin: 0.25rem 0 0;
+  color: var(--slate-500);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.catalogue-section-count {
+  flex: 0 0 auto;
+  color: var(--slate-500);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.catalogue-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.catalogue-equipment .catalogue-card-grid {
+  width: min(100%, 1500px);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  margin-inline: auto;
+}
+
+.resource-card.catalogue-resource-card,
+.resource-card.catalogue-kit-card {
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.resource-card.catalogue-resource-card::before,
+.resource-card.catalogue-kit-card::before {
+  display: none;
+}
+
+.resource-card.catalogue-resource-card:hover,
+.resource-card.catalogue-kit-card:hover {
+  transform: none;
+  border-color: var(--slate-300);
+  box-shadow: var(--shadow-md);
+}
+
+.catalogue-image-frame {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  overflow: hidden;
+  background: var(--slate-100);
+}
+
+.catalogue-card-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.catalogue-card-image[hidden] {
+  display: none !important;
+}
+
+.catalogue-image-fallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: var(--slate-500);
+  background: var(--slate-100);
+}
+
+.catalogue-image-fallback[hidden] {
+  display: none !important;
+}
+
+.catalogue-image-fallback svg {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.catalogue-image-frame-fallback {
+  color: var(--slate-500);
+}
+
+.catalogue-card-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 0.95rem 1rem 0.5rem;
+}
+
+.catalogue-card-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  min-width: 0;
+  margin-bottom: 0.55rem;
+}
+
+.catalogue-card-status-row .type-badge,
+.catalogue-card-status-row .status-badge {
+  flex: 0 1 auto;
+}
+
+.catalogue-card-status-row .status-badge {
+  white-space: nowrap;
+}
+
+.resource-card.catalogue-resource-card .resource-name,
+.resource-card.catalogue-kit-card .resource-name {
+  margin: 0 0 0.4rem;
+  color: var(--slate-900);
+  font-size: 1.02rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.catalogue-resource-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem 0.8rem;
+  margin: 0 0 0.45rem;
+}
+
+.catalogue-meta-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.catalogue-meta-item span {
+  color: var(--slate-500);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.catalogue-meta-item strong {
+  color: var(--slate-700);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.catalogue-resource-description {
+  display: -webkit-box;
+  min-height: 2.8em;
+  margin: 0.25rem 0 0.75rem;
+  overflow: hidden;
+  color: var(--slate-600);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.catalogue-rooms .catalogue-resource-description,
+.catalogue-labs .catalogue-resource-description {
+  min-height: 4.2em;
+  -webkit-line-clamp: 3;
+}
+
+.catalogue-equipment-icon {
+  display: grid;
+  width: 2.55rem;
+  height: 2.55rem;
+  place-items: center;
+  margin-bottom: 0.7rem;
+  border-radius: var(--radius-md);
+  color: var(--brand-blue-700);
+  background: var(--brand-blue-50);
+}
+
+.catalogue-equipment-icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.catalogue-kit-count {
+  margin: auto 0 0.5rem;
+  color: var(--slate-500);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.resource-card-actions.catalogue-card-actions {
+  display: flex;
+  min-height: 3.4rem;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: auto;
+  padding: 0.7rem 1rem 0.85rem;
+  border-top: 1px solid var(--slate-100);
+}
+
+.catalogue-card-actions .btn {
+  min-height: 2.25rem;
+}
+
+.catalogue-card-actions .report-issue-btn {
+  padding-right: 0.65rem;
+  padding-left: 0.65rem;
+}
+
+.catalogue-card-actions .report-issue-btn svg {
+  flex: 0 0 auto;
+}
+
+.catalogue-card-actions .resource-action-note {
+  color: var(--slate-500);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 600px) {
+  .resources-grid {
+    gap: 1.75rem;
+  }
+
+  .catalogue-card-grid,
+  .catalogue-equipment .catalogue-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .catalogue-section-heading {
+    align-items: flex-start;
+  }
+
+  .catalogue-card-status-row {
+    flex-wrap: wrap;
   }
 }

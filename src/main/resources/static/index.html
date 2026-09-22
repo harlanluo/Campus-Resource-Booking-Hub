@@ -7,28 +7,26 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=11.0" />
+  <link rel="stylesheet" href="style.css?v=11.1" />
 </head>
 <body>
   <!-- Public authentication entry point. The authenticated shell stays hidden until /me succeeds. -->
   <section id="authScreen" class="auth-screen" aria-labelledby="authTitle">
     <div class="auth-layout">
       <div class="auth-intro">
-        <div class="auth-brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
-            <path d="M6 6h10M6 10h10M6 14h6"/>
-          </svg>
+        <img class="auth-hero-image" src="/images/auth/login-hero.webp" alt="" aria-hidden="true" fetchpriority="high" />
+        <div class="auth-intro-content">
+          <div class="auth-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+              <path d="M6 6h10M6 10h10M6 14h6"/>
+            </svg>
+          </div>
+          <p class="auth-kicker">Campus Booking Hub</p>
+          <h1 id="authTitle">Campus Resource Booking Hub</h1>
+          <p class="auth-lead">Book study rooms, labs and equipment in one place.</p>
+          <p class="auth-description">Find the right space, choose an available time, and keep each reservation in one clear workspace.</p>
         </div>
-        <p class="auth-kicker">Campus Booking Hub</p>
-        <h1 id="authTitle">Campus Resource Booking Hub</h1>
-        <p class="auth-lead">Book study rooms, labs and equipment in one place.</p>
-        <p class="auth-description">Find the right space, choose an available time, and keep every reservation in one clear workspace.</p>
-        <ul class="auth-benefits" aria-label="Campus Booking Hub features">
-          <li><span class="auth-benefit-icon" aria-hidden="true">✓</span><span>See availability before you request a booking</span></li>
-          <li><span class="auth-benefit-icon" aria-hidden="true">✓</span><span>Track approvals, waitlist offers and history</span></li>
-          <li><span class="auth-benefit-icon" aria-hidden="true">✓</span><span>Keep Project Kit and resource reservations together</span></li>
-        </ul>
       </div>
 
       <div class="auth-panel">
@@ -258,10 +256,10 @@
 
           <div class="filter-chips" id="typeFilters">
             <button class="chip active" type="button" data-filter="ALL" aria-pressed="true">All items</button>
-            <button class="chip" type="button" data-filter="ROOM" aria-pressed="false">🏛️ Study rooms</button>
-            <button class="chip" type="button" data-filter="LAB" aria-pressed="false">💻 Computer labs</button>
-            <button class="chip" type="button" data-filter="EQUIPMENT" aria-pressed="false">📽️ Equipment</button>
-            <button class="chip" type="button" data-filter="KIT" aria-pressed="false">📦 Project Kits</button>
+            <button class="chip" type="button" data-filter="ROOM" aria-pressed="false">Study rooms</button>
+            <button class="chip" type="button" data-filter="LAB" aria-pressed="false">Computer &amp; specialist labs</button>
+            <button class="chip" type="button" data-filter="EQUIPMENT" aria-pressed="false">Equipment</button>
+            <button class="chip" type="button" data-filter="KIT" aria-pressed="false">Project Kits</button>
             <button class="chip-toggle" type="button" id="onlyAvailableToggle" aria-pressed="false">
               <span class="toggle-switch"></span>
               <span>Operational only</span>
@@ -549,7 +547,8 @@
                   <th>ID</th>
                   <th>Resource Name</th>
                   <th>Type</th>
-                  <th>Description</th>
+                  <th>Location</th>
+                  <th>Capacity</th>
                   <th>Status</th>
                   <th style="text-align: right;">Actions</th>
                 </tr>
@@ -842,6 +841,18 @@
           </div>
         </div>
 
+        <div class="form-row">
+          <div class="form-group">
+            <label for="newResourceLocation">Location</label>
+            <input type="text" id="newResourceLocation" maxlength="160" placeholder="e.g. Library, Level 2, A" />
+          </div>
+          <div class="form-group">
+            <label for="newResourceCapacity">Capacity</label>
+            <input type="number" id="newResourceCapacity" min="1" step="1" inputmode="numeric" placeholder="Rooms and labs" />
+            <span class="form-help-text">Use a positive whole number for rooms or labs. Leave blank for equipment.</span>
+          </div>
+        </div>
+
         <div class="form-group">
           <label for="newResourceDescription">Description / Features</label>
           <textarea id="newResourceDescription" rows="3" placeholder="Provide details such as seating capacity, equipment specs, or building location..."></textarea>
@@ -906,6 +917,6 @@
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <!-- Main JavaScript Bundle -->
-  <script src="app.js?v=11.0"></script>
+  <script src="app.js?v=11.1"></script>
 </body>
 </html>

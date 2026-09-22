@@ -17,22 +17,36 @@ INSERT INTO users (username, password, email, role) VALUES
     ('priya_patel',  '$2a$10$Q3zGnMD5yWq.yoMDZ.bYK.egyMsRGC95lpC62x68FB8u9m2C1CQse', 'priya.patel@campus.edu',  'STUDENT'),
     ('ethan_taylor', '$2a$10$Q3zGnMD5yWq.yoMDZ.bYK.egyMsRGC95lpC62x68FB8u9m2C1CQse', 'ethan.taylor@campus.edu', 'STUDENT');
 
--- Resources  (9 records)
-INSERT INTO resources (name, type, description, status, manual_maintenance) VALUES
-    ('Study Room A',              'ROOM',      'Quiet study room on Level 2, seats 6.',                                          'AVAILABLE',   FALSE),
-    ('Computer Lab 101',          'LAB',       'PC lab with 30 workstations and high-speed internet.',                           'AVAILABLE',   FALSE),
-    ('Projector Unit #3',         'EQUIPMENT', 'Portable HDMI projector with carry case, 4K capable.',                          'MAINTENANCE', TRUE),
-    ('DSLR 4K Camera',            'EQUIPMENT', 'Sony Alpha 4K Cinema Camera with 24-70mm f/2.8 zoom lens.',                      'AVAILABLE',   FALSE),
-    ('Heavy-Duty Tripod',         'EQUIPMENT', 'Fluid-head professional aluminum tripod with quick-release plate.',              'AVAILABLE',   FALSE),
-    ('Shotgun Mic Kit',           'EQUIPMENT', 'Directional condenser shotgun mic with XLR cable and deadcat wind shield.',      'AVAILABLE',   FALSE),
-    ('Studio Podcast Mic',        'EQUIPMENT', 'Broadcast dynamic cardioid XLR microphone for pristine studio vocals.',          'AVAILABLE',   FALSE),
-    ('Audio Interface Mixer',     'EQUIPMENT', '2-channel USB audio interface with +48V phantom power and direct monitoring.',   'AVAILABLE',   FALSE),
-    ('Studio Monitor Headphones', 'EQUIPMENT', 'Closed-back professional over-ear audio monitoring headphones.',                 'AVAILABLE',   FALSE);
+-- Resources  (21 records; retain the original first nine identities and order)
+INSERT INTO resources (name, type, description, location, capacity, status, manual_maintenance) VALUES
+    ('Study Room A',                 'ROOM',      'Quiet study room with table power and a whiteboard.',                                              'Library, Level 2, A',                         6,    'AVAILABLE',   FALSE),
+    ('Computer Lab 101',             'LAB',       'General-purpose PC lab with course software and high-speed network access.',                       'Computing Building, Level 1, 101',            30,   'AVAILABLE',   FALSE),
+    ('Projector Unit #3',            'EQUIPMENT', 'Portable projector with HDMI, carry case, and remote.',                                            'AV Loan Desk, Library Ground Floor',          NULL, 'MAINTENANCE', TRUE),
+    ('DSLR 4K Camera',               'EQUIPMENT', '4K camera with standard zoom lens, battery, charger, and carry bag.',                              'Media Equipment Desk',                        NULL, 'AVAILABLE',   FALSE),
+    ('Heavy-Duty Tripod',            'EQUIPMENT', 'Stable fluid-head tripod with quick-release plate.',                                               'Media Equipment Desk',                        NULL, 'AVAILABLE',   FALSE),
+    ('Shotgun Mic Kit',              'EQUIPMENT', 'Directional microphone with XLR cable and windscreen.',                                             'Media Equipment Desk',                        NULL, 'AVAILABLE',   FALSE),
+    ('Studio Podcast Mic',           'EQUIPMENT', 'Broadcast dynamic microphone for voice recording.',                                                 'Podcast Studio Equipment Desk',               NULL, 'AVAILABLE',   FALSE),
+    ('Audio Interface Mixer',        'EQUIPMENT', 'Two-channel USB audio interface with phantom power and direct monitoring.',                         'Podcast Studio Equipment Desk',               NULL, 'AVAILABLE',   FALSE),
+    ('Studio Monitor Headphones',    'EQUIPMENT', 'Closed-back headphones for recording and audio monitoring.',                                        'Podcast Studio Equipment Desk',               NULL, 'AVAILABLE',   FALSE),
+    ('Group Study Room B',           'ROOM',      'Enclosed group room with display, whiteboard, and table power.',                                     'Library, Level 2, B',                         8,    'AVAILABLE',   FALSE),
+    ('Quiet Study Room 2.14',        'ROOM',      'Low-noise focus room with acoustic door and individual work points.',                              'Library, Level 2, 2.14',                      4,    'AVAILABLE',   FALSE),
+    ('Accessible Study Room 1.05',   'ROOM',      'Step-free study room with clear turning space and a height-adjustable table.',                      'Student Centre, Ground, 1.05',                4,    'AVAILABLE',   FALSE),
+    ('Project Team Room 3.12',       'ROOM',      'Team workspace with wall display and writable collaboration boards.',                              'Learning Hub, Level 3, 3.12',                 10,   'AVAILABLE',   FALSE),
+    ('Postgraduate Study Room 2.21', 'ROOM',      'Quiet shared study room for postgraduate work and small meetings.',                                 'Library, Level 2, 2.21',                      6,    'AVAILABLE',   FALSE),
+    ('Computer Lab 203',             'LAB',       'Desktop lab with dual monitors and general teaching software.',                                     'Computing Building, Level 2, 203',            24,   'AVAILABLE',   FALSE),
+    ('GPU Computing Lab',            'LAB',       'GPU workstations for machine-learning, simulation, and rendering coursework.',                      'Computing Building, Level 2, 2.16',           20,   'AVAILABLE',   FALSE),
+    ('Electronics Prototyping Lab',  'LAB',       'Supervised bench space for electronics measurement and prototyping work.',                          'Engineering Building, E1.14',                 16,   'AVAILABLE',   FALSE),
+    ('Wireless Presentation Kit',   'EQUIPMENT', 'Presentation clicker plus USB-C and HDMI adapters in a labelled case.',                             'AV Loan Desk, Library Ground Floor',          NULL, 'AVAILABLE',   FALSE),
+    ('Portable LCD Projector',       'EQUIPMENT', 'Portable teaching projector with HDMI and USB-C adapters and carry case.',                          'AV Loan Desk, Library Ground Floor',          NULL, 'AVAILABLE',   FALSE),
+    ('Portable Field Recorder',      'EQUIPMENT', 'Multitrack portable recorder with lavalier microphone set and storage case.',                       'Media Equipment Desk',                        NULL, 'AVAILABLE',   FALSE),
+    ('LED Light Panel Kit',          'EQUIPMENT', 'Pair of portable bi-colour LED light panels with stands and power accessories.',                    'Media Equipment Desk',                        NULL, 'AVAILABLE',   FALSE);
 
 -- Project Kits and their current resource composition
 INSERT INTO kits (name, description) VALUES
-    ('Media Production Kit', 'Complete cinematography bundle: 4K DSLR Camera, Heavy-Duty Tripod, and Directional Shotgun Mic.'),
-    ('Podcast Recording Kit', 'All-in-one studio bundle: Broadcast Dynamic Mic, 2-Channel USB Audio Mixer, and Studio Monitor Headphones.');
+    ('Media Production Kit', 'Compact setup for student video projects.'),
+    ('Podcast Recording Kit', 'Small audio setup for podcasts and recorded interviews.'),
+    ('Hybrid Teaching Kit', 'Portable presentation setup for teaching sessions and student showcases.'),
+    ('Field Interview Kit', 'Portable setup for filming and recording student interviews.');
 
 INSERT INTO kit_items (kit_id, resource_id) VALUES
     (1, 4),
@@ -40,7 +54,13 @@ INSERT INTO kit_items (kit_id, resource_id) VALUES
     (1, 6),
     (2, 7),
     (2, 8),
-    (2, 9);
+    (2, 9),
+    (3, 19),
+    (3, 18),
+    (4, 4),
+    (4, 5),
+    (4, 20),
+    (4, 21);
 
 -- One first-class demo Kit reservation. Its child rows below block resources.
 INSERT INTO kit_bookings

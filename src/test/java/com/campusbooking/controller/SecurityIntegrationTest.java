@@ -52,12 +52,16 @@ class SecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Unauthenticated visitors can load only the public application entry point")
+    @DisplayName("Unauthenticated visitors can load the public application entry point and login hero")
     void publicEntryPointIsAvailableWithoutAuthentication() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/app.js"))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/images/auth/login-hero.webp"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/images/resources/study-room-a.webp"))
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/users/me"))
                 .andExpect(status().isUnauthorized());
     }

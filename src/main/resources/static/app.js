@@ -45,6 +45,80 @@ const state = {
   userDataLoaded: false,
 };
 
+// Local catalogue artwork is mapped by the seeded resource/kit identity.
+// Equipment intentionally uses the shared icon treatment instead of photos.
+const RESOURCE_IMAGE_BY_NAME = Object.freeze({
+  'Study Room A': '/images/resources/study-room-a.webp',
+  'Group Study Room B': '/images/resources/group-study-room-b.webp',
+  'Quiet Study Room 2.14': '/images/resources/quiet-study-room-214.webp',
+  'Accessible Study Room 1.05': '/images/resources/accessible-study-room-105.webp',
+  'Project Team Room 3.12': '/images/resources/project-team-room-312.webp',
+  'Postgraduate Study Room 2.21': '/images/resources/postgraduate-study-room-221.webp',
+  'Computer Lab 101': '/images/resources/computer-lab-101.webp',
+  'Computer Lab 203': '/images/resources/computer-lab-203.webp',
+  'GPU Computing Lab': '/images/resources/gpu-computing-lab.webp',
+  'Electronics Prototyping Lab': '/images/resources/electronics-prototyping-lab.webp'
+});
+
+const KIT_IMAGE_BY_NAME = Object.freeze({
+  'Media Production Kit': '/images/kits/kit-media-production.webp',
+  'Podcast Recording Kit': '/images/kits/kit-podcast-recording.webp',
+  'Hybrid Teaching Kit': '/images/kits/kit-hybrid-teaching.webp',
+  'Field Interview Kit': '/images/kits/kit-field-interview.webp'
+});
+
+const PROJECTOR_ICON_PATH = '<rect x="3" y="5" width="18" height="12" rx="2"/><circle cx="16.5" cy="11" r="2.5"/><path d="M8 21h8m-4-4v4"/>';
+const GENERAL_EQUIPMENT_ICON_PATH = '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/>';
+
+const EQUIPMENT_ICON_PATHS = Object.freeze({
+  'Projector Unit #3': PROJECTOR_ICON_PATH,
+  'DSLR 4K Camera': '<path d="M4 8h4l1.5-2h5L16 8h4a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/>',
+  'Heavy-Duty Tripod': '<path d="M5 4h14v4H5zM12 8v3m0-1L6 21m6-11 6 11m-6-11v11"/>',
+  'Shotgun Mic Kit': '<path d="M3 11h13a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H3v7Zm0-4h-1m18-2 1.5-1m-1.5 5 1.5 1M8 11v4a4 4 0 0 0 4 4h1"/>',
+  'Studio Podcast Mic': '<rect x="8" y="3" width="8" height="12" rx="4"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4m-4 0h8M9 7h6m-6 3h6"/>',
+  'Audio Interface Mixer': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 8v2m0 4v2m5-8v4m0 2v2m5-8v2m0 4v2"/><circle cx="7" cy="12" r="1"/><circle cx="12" cy="13" r="1"/><circle cx="17" cy="12" r="1"/>',
+  'Studio Monitor Headphones': '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/>',
+  'Wireless Presentation Kit': '<rect x="9" y="2.5" width="6" height="19" rx="3"/><circle cx="12" cy="8" r="1.2"/><path d="M10 13h4m-3 4h2"/>',
+  'Portable LCD Projector': PROJECTOR_ICON_PATH,
+  'Portable Field Recorder': '<rect x="4" y="3" width="16" height="18" rx="2"/><rect x="7" y="6" width="10" height="7" rx="1"/><path d="M8 10h1l1-2 2 4 1.5-3 1 1H16M8 16h8m-8 2h.01m4-.01h.01m4 0h.01"/>',
+  'LED Light Panel Kit': '<rect x="4" y="3" width="16" height="11" rx="1.5"/><path d="M8 6h8m-8 4h8m-4 4v3m0 0-4 4m4-4 4 4m-4-4v4"/>'
+});
+
+function catalogueSvgIcon(path) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+}
+
+function catalogueIconSvg(type) {
+  const paths = {
+    ROOM: '<path d="M4 20V5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V20M2.5 20h19M8 8h3v3H8zM13.5 8H16M13.5 11H16M8 14h3v6"/>',
+    LAB: '<rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8M12 17v4M7 8h10M7 11h7"/>',
+    KIT: '<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>'
+  };
+  return catalogueSvgIcon(paths[type] || GENERAL_EQUIPMENT_ICON_PATH);
+}
+
+function equipmentIconSvg(resourceName) {
+  return catalogueSvgIcon(EQUIPMENT_ICON_PATHS[resourceName] || GENERAL_EQUIPMENT_ICON_PATH);
+}
+
+function catalogueImageMarkup(imagePath, altText, fallbackType) {
+  const fallback = `<span class="catalogue-image-fallback" hidden>${catalogueIconSvg(fallbackType)}</span>`;
+  if (!imagePath) {
+    return `<div class="catalogue-image-frame catalogue-image-frame-fallback" aria-label="Image unavailable for ${escapeHtml(altText)}">${fallback.replace(' hidden', '')}</div>`;
+  }
+  return `<div class="catalogue-image-frame"><img class="catalogue-card-image" src="${imagePath}" alt="${escapeHtml(altText)}" loading="lazy">${fallback}</div>`;
+}
+
+function bindCatalogueImageFallbacks(container) {
+  container.querySelectorAll('.catalogue-card-image').forEach((image) => {
+    image.addEventListener('error', () => {
+      image.hidden = true;
+      const fallback = image.nextElementSibling;
+      if (fallback) fallback.hidden = false;
+    }, { once: true });
+  });
+}
+
 const STUDENT_ROUTES = Object.freeze({
   home: { tabId: 'home', title: 'Home' },
   resources: { tabId: 'browse', title: 'Resources' },
@@ -245,6 +319,8 @@ const elements = {
   newResourceType: document.getElementById('newResourceType'),
   newResourceStatus: document.getElementById('newResourceStatus'),
   newResourceDescription: document.getElementById('newResourceDescription'),
+  newResourceLocation: document.getElementById('newResourceLocation'),
+  newResourceCapacity: document.getElementById('newResourceCapacity'),
 
   // Issue Modal
   issueModalBackdrop: document.getElementById('issueModalBackdrop'),
@@ -1597,43 +1673,34 @@ function renderResources() {
   }
 
   const isKitFilter = state.filterType === 'KIT';
-  const isAllFilter = state.filterType === 'ALL';
+  const showKits = state.filterType === 'ALL' || isKitFilter;
+  const query = state.searchQuery.trim().toLowerCase();
 
-  let filteredResources = state.resources;
-  let filteredKits = state.kits;
-
-  // Filter individual resources
-  if (!isKitFilter && !isAllFilter) {
-    filteredResources = filteredResources.filter((r) => r.type === state.filterType);
-  } else if (isKitFilter) {
-    filteredResources = []; // show only kits
-  }
+  let filteredResources = isKitFilter
+    ? []
+    : state.resources.filter((resource) =>
+        state.filterType === 'ALL' || resource.type === state.filterType
+      );
+  let filteredKits = showKits ? [...state.kits] : [];
 
   if (state.filterOnlyAvailable) {
-    filteredResources = filteredResources.filter((r) => r.status === 'AVAILABLE');
-    filteredKits = filteredKits.filter((k) =>
-      k.items && k.items.every((i) => i.status === 'AVAILABLE')
-    );
+    filteredResources = filteredResources.filter((resource) => resource.status === 'AVAILABLE');
+    filteredKits = filteredKits.filter(kitIsReady);
   }
 
-  if (state.searchQuery.trim()) {
-    const q = state.searchQuery.toLowerCase();
-    filteredResources = filteredResources.filter(
-      (r) =>
-        r.name.toLowerCase().includes(q) ||
-        r.type.toLowerCase().includes(q) ||
-        (r.description && r.description.toLowerCase().includes(q))
+  if (query) {
+    filteredResources = filteredResources.filter((resource) =>
+      [resource.name, resource.type, resource.description, resource.location, resource.capacity]
+        .some((value) => String(value ?? '').toLowerCase().includes(query))
     );
-    filteredKits = filteredKits.filter(
-      (k) =>
-        k.name.toLowerCase().includes(q) ||
-        (k.description && k.description.toLowerCase().includes(q)) ||
-        (k.items && k.items.some((i) => i.name.toLowerCase().includes(q)))
+    filteredKits = filteredKits.filter((kit) =>
+      [kit.name, kit.description].some((value) => String(value ?? '').toLowerCase().includes(query)) ||
+      (kit.items || []).some((item) =>
+        [item.name, item.description, item.location, item.capacity]
+          .some((value) => String(value ?? '').toLowerCase().includes(query))
+      )
     );
   }
-
-  const showKits = isKitFilter || isAllFilter;
-  const totalItemsCount = filteredResources.length + (showKits ? filteredKits.length : 0);
 
   if (state.kitLoadError && isKitFilter && state.kits.length === 0) {
     renderErrorState(
@@ -1645,10 +1712,41 @@ function renderResources() {
     return;
   }
 
-  if (totalItemsCount === 0) {
+  const sections = [
+    {
+      title: 'Project Kits',
+      description: 'Ready-made equipment bundles for student projects.',
+      items: filteredKits,
+      renderCard: renderKitCard,
+      className: 'catalogue-kits'
+    },
+    {
+      title: 'Study rooms',
+      description: 'Quiet spaces and team rooms for individual and group study.',
+      items: filteredResources.filter((resource) => resource.type === 'ROOM'),
+      renderCard: renderResourceCard,
+      className: 'catalogue-rooms'
+    },
+    {
+      title: 'Computer & specialist labs',
+      description: 'Teaching and project spaces with specialist computing or bench equipment.',
+      items: filteredResources.filter((resource) => resource.type === 'LAB'),
+      renderCard: renderResourceCard,
+      className: 'catalogue-labs'
+    },
+    {
+      title: 'Equipment',
+      description: 'Borrowable equipment with pickup locations listed on each item.',
+      items: filteredResources.filter((resource) => resource.type !== 'ROOM' && resource.type !== 'LAB'),
+      renderCard: renderResourceCard,
+      className: 'catalogue-equipment'
+    }
+  ].filter((section) => section.items.length > 0);
+
+  if (sections.length === 0) {
     grid.innerHTML = `
       <div class="empty-state">
-        <div class="state-icon" aria-hidden="true">⌕</div>
+        <div class="state-icon" aria-hidden="true">${catalogueIconSvg('ROOM')}</div>
         <p class="state-title">No matching resources found</p>
         <p>Try another search or choose a different category.</p>
       </div>
@@ -1656,140 +1754,99 @@ function renderResources() {
     return;
   }
 
-  // Render Project Kits first if filter is KIT or ALL
-  if (showKits && filteredKits.length > 0) {
-    filteredKits.forEach((kit) => {
-      grid.appendChild(renderKitCard(kit));
-    });
-  }
-
-  // Render individual resources
-  const typeIcons = {
-    ROOM: '🏢',
-    LAB: '💻',
-    EQUIPMENT: '📽️'
-  };
-
-  filteredResources.forEach((resource) => {
-    const card = document.createElement('div');
-    card.className = 'resource-card';
-
-    const isAvailable = resource.status === 'AVAILABLE';
-
-    let actionBtnHtml = '';
-    if (isAvailable) {
-      actionBtnHtml = `
-        <button class="btn btn-primary btn-sm book-btn" data-id="${resource.id}" aria-label="Book ${escapeHtml(resource.name)}">
-          <span>⚡ Book Now</span>
-        </button>
-      `;
-    } else {
-      actionBtnHtml = '<span class="resource-action-note">Not bookable right now. Check back after maintenance.</span>';
-    }
-
-    const reportIssueBtnHtml = state.currentUser.role !== 'ADMIN'
-      ? `<button class="btn btn-ghost btn-sm report-issue-btn" data-id="${resource.id}" aria-label="Report an issue with ${escapeHtml(resource.name)}">
-           <span>⚠️ Report Issue</span>
-         </button>`
-      : '';
-
-    card.innerHTML = `
-      <div>
-        <div class="resource-card-header">
-          <div class="resource-icon-wrap ${resource.type.toLowerCase()}">
-            ${typeIcons[resource.type] || '📦'}
-          </div>
-          <div class="resource-badge-group">
-            <span class="type-badge ${resource.type}">${escapeHtml(getResourceTypeLabel(resource.type))}</span>
-            <span class="status-badge ${resource.status}">
-              <span class="dot"></span>
-              <span>${escapeHtml(getResourceStatusLabel(resource.status))}</span>
-            </span>
-          </div>
+  sections.forEach((sectionData) => {
+    const section = document.createElement('section');
+    section.className = `catalogue-section ${sectionData.className}`;
+    section.innerHTML = `
+      <div class="catalogue-section-heading">
+        <div>
+          <h2>${escapeHtml(sectionData.title)}</h2>
+          <p>${escapeHtml(sectionData.description)}</p>
         </div>
-
-        <h3 class="resource-name">${escapeHtml(resource.name)}</h3>
-        <p class="resource-desc">${escapeHtml(resource.description || 'No detailed specifications provided.')}</p>
+        <span class="catalogue-section-count">${sectionData.items.length}</span>
       </div>
-
-      <div class="resource-card-actions">
-        ${actionBtnHtml}
-        ${reportIssueBtnHtml}
-      </div>
+      <div class="catalogue-card-grid"></div>
     `;
-
-    // Event listeners
-    const bookBtn = card.querySelector('.book-btn');
-    if (bookBtn) {
-      bookBtn.addEventListener('click', () => openBookingModal(resource));
-    }
-
-    const reportIssueBtn = card.querySelector('.report-issue-btn');
-    if (reportIssueBtn) {
-      reportIssueBtn.addEventListener('click', () => openIssueModal(resource));
-    }
-
-    grid.appendChild(card);
+    const cardGrid = section.querySelector('.catalogue-card-grid');
+    sectionData.items.forEach((item) => cardGrid.appendChild(sectionData.renderCard(item)));
+    grid.appendChild(section);
   });
+
+  bindCatalogueImageFallbacks(grid);
+}
+
+function kitIsReady(kit) {
+  return Array.isArray(kit.items) && kit.items.length > 0 &&
+    kit.items.every((item) => item.status === 'AVAILABLE');
+}
+
+function renderResourceCard(resource) {
+  const card = document.createElement('article');
+  const isRoomOrLab = resource.type === 'ROOM' || resource.type === 'LAB';
+  const isAvailable = resource.status === 'AVAILABLE';
+  const typeClass = resource.type === 'ROOM' ? 'room' : resource.type === 'LAB' ? 'lab' : 'equipment';
+  const imagePath = isRoomOrLab ? RESOURCE_IMAGE_BY_NAME[resource.name] : null;
+  const image = isRoomOrLab
+    ? catalogueImageMarkup(imagePath, resource.name, resource.type)
+    : '';
+  const metadata = [
+    resource.location
+      ? `<div class="catalogue-meta-item"><span>${typeClass === 'equipment' ? 'Pickup' : 'Location'}</span><strong>${escapeHtml(resource.location)}</strong></div>`
+      : '',
+    resource.capacity != null
+      ? `<div class="catalogue-meta-item"><span>Capacity</span><strong>${escapeHtml(resource.capacity)} people</strong></div>`
+      : ''
+  ].filter(Boolean).join('');
+  const actions = isAvailable
+    ? `<button class="btn btn-primary btn-sm book-btn" type="button" aria-label="Book ${escapeHtml(resource.name)}">Book</button>`
+    : '<span class="resource-action-note">Not operational right now</span>';
+  const reportIssue = state.currentUser.role !== 'ADMIN'
+    ? `<button class="btn btn-ghost btn-sm report-issue-btn" type="button" aria-label="Report an issue with ${escapeHtml(resource.name)}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4m0 3h.01"/></svg><span>Report issue</span></button>`
+    : '';
+
+  card.className = `resource-card catalogue-resource-card ${typeClass}`;
+  card.innerHTML = `
+    ${image}
+    <div class="catalogue-card-content">
+      ${!isRoomOrLab ? `<div class="catalogue-equipment-icon" aria-hidden="true">${equipmentIconSvg(resource.name)}</div>` : ''}
+      <div class="catalogue-card-status-row">
+        <span class="type-badge ${escapeHtml(resource.type)}">${escapeHtml(getResourceTypeLabel(resource.type))}</span>
+        <span class="status-badge ${escapeHtml(resource.status)}"><span class="dot"></span><span>${escapeHtml(getResourceStatusLabel(resource.status))}</span></span>
+      </div>
+      <h3 class="resource-name">${escapeHtml(resource.name)}</h3>
+      ${metadata ? `<div class="catalogue-resource-meta">${metadata}</div>` : ''}
+      <p class="catalogue-resource-description">${escapeHtml(resource.description || 'No detailed specifications provided.')}</p>
+    </div>
+    <div class="resource-card-actions catalogue-card-actions">${actions}${reportIssue}</div>
+  `;
+
+  const bookButton = card.querySelector('.book-btn');
+  if (bookButton) bookButton.addEventListener('click', () => openBookingModal(resource));
+  const issueButton = card.querySelector('.report-issue-btn');
+  if (issueButton) issueButton.addEventListener('click', () => openIssueModal(resource));
+  return card;
 }
 
 function renderKitCard(kit) {
-  const card = document.createElement('div');
-  card.className = 'resource-card kit-card';
-
-  const allAvailable = kit.items && kit.items.every((i) => i.status === 'AVAILABLE');
-
-  const itemsHtml = kit.items
-    ? kit.items
-        .map(
-          (item) => `
-        <li class="kit-item-row">
-          <span class="item-name">
-            <span>${item.type === 'ROOM' ? '🏢' : item.type === 'LAB' ? '💻' : '📽️'}</span>
-            <span>${escapeHtml(item.name)}</span>
-          </span>
-          <span class="item-status-pill ${item.status}">${escapeHtml(getResourceStatusLabel(item.status))}</span>
-        </li>
-      `
-        )
-        .join('')
-    : '';
-
+  const card = document.createElement('article');
+  const ready = kitIsReady(kit);
+  const count = Number(kit.itemCount ?? (kit.items || []).length);
+  card.className = 'resource-card catalogue-kit-card';
   card.innerHTML = `
-    <div>
-      <div class="resource-card-header">
-        <div class="resource-icon-wrap kit">
-          📦
-        </div>
-        <div class="resource-badge-group">
-            <span class="type-badge KIT">Project Kit</span>
-          <span class="status-badge ${allAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}">
-            <span class="dot"></span>
-            <span>${allAvailable ? 'Ready to schedule' : 'Check availability'}</span>
-          </span>
-        </div>
+    ${catalogueImageMarkup(KIT_IMAGE_BY_NAME[kit.name], kit.name, 'KIT')}
+    <div class="catalogue-card-content">
+      <div class="catalogue-card-status-row">
+        <span class="type-badge KIT">Project Kit</span>
+        <span class="status-badge ${ready ? 'AVAILABLE' : 'UNAVAILABLE'}"><span class="dot"></span><span>${ready ? 'Ready' : 'Not operational'}</span></span>
       </div>
-
       <h3 class="resource-name">${escapeHtml(kit.name)}</h3>
-      <p class="resource-desc">${escapeHtml(kit.description || 'Pre-configured project equipment bundle.')}</p>
-
-      <div class="kit-bundle-section">
-        <div class="kit-bundle-title">
-          <span>📦 Project Kit contents (${kit.itemCount} ${kit.itemCount === 1 ? 'item' : 'items'})</span>
-        </div>
-        <ul class="kit-items-list">
-          ${itemsHtml}
-        </ul>
-      </div>
+      <p class="catalogue-resource-description">${escapeHtml(kit.description || 'Pre-configured project equipment bundle.')}</p>
+      <p class="catalogue-kit-count">${count} included ${count === 1 ? 'resource' : 'resources'}</p>
     </div>
-
-    <div class="resource-card-actions">
-      <button class="btn btn-book-kit btn-sm book-kit-btn" data-kit-id="${kit.id}" aria-label="Reserve ${escapeHtml(kit.name)}">
-        <span>⚡ Reserve entire kit (${kit.itemCount} ${kit.itemCount === 1 ? 'item' : 'items'})</span>
-      </button>
+    <div class="resource-card-actions catalogue-card-actions">
+      <button class="btn btn-primary btn-sm book-kit-btn" type="button" aria-label="Reserve ${escapeHtml(kit.name)}">Reserve kit</button>
     </div>
   `;
-
   card.querySelector('.book-kit-btn').addEventListener('click', () => openKitBookingModal(kit));
   return card;
 }
@@ -2531,7 +2588,7 @@ function renderAdminResourcesTable() {
   tbody.innerHTML = '';
 
   if (state.resources.length === 0) {
-    renderTableState(tbody, 6, 'No resources in the catalogue.', 'Add a room, lab, or piece of equipment to get started.');
+    renderTableState(tbody, 7, 'No resources in the catalogue.', 'Add a room, lab, or piece of equipment to get started.');
     return;
   }
 
@@ -2544,7 +2601,8 @@ function renderAdminResourcesTable() {
       <td><strong>#${resource.id}</strong></td>
       <td><span style="font-weight: 700; color: var(--slate-900);">${escapeHtml(resource.name)}</span></td>
       <td><span class="type-badge ${resource.type}">${escapeHtml(getResourceTypeLabel(resource.type))}</span></td>
-      <td style="max-width: 320px; color: var(--slate-600); font-size: 0.825rem;">${escapeHtml(resource.description || '—')}</td>
+      <td style="max-width: 240px; color: var(--slate-600); font-size: 0.825rem;">${escapeHtml(resource.location || '—')}</td>
+      <td>${resource.capacity == null ? '—' : escapeHtml(resource.capacity)}</td>
       <td>
         <span class="status-badge ${resource.status}">
           <span class="dot"></span>
@@ -3578,13 +3636,22 @@ async function handleAddResourceSubmit(e) {
   const type = elements.newResourceType.value;
   const status = elements.newResourceStatus.value;
   const description = elements.newResourceDescription.value.trim();
+  const location = elements.newResourceLocation.value.trim();
+  const capacityText = elements.newResourceCapacity.value.trim();
 
   if (!name) {
     showToast('Validation Error', 'Resource name is required.', 'warning');
     return;
   }
 
-  const payload = { name, type, status, description };
+  const capacity = capacityText ? Number(capacityText) : null;
+  if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1)) {
+    showToast('Validation Error', 'Capacity must be a positive whole number.', 'warning');
+    elements.newResourceCapacity.focus();
+    return;
+  }
+
+  const payload = { name, type, status, description, location: location || null, capacity };
 
   try {
     await api.createResource(payload);

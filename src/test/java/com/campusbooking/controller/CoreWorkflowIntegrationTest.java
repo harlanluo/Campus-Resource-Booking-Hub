@@ -1,11 +1,14 @@
 package com.campusbooking.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.campusbooking.model.Booking;
+import com.campusbooking.model.Kit;
 import com.campusbooking.model.Resource;
 import com.campusbooking.model.User;
 import com.campusbooking.model.Waitlist;
 import com.campusbooking.repository.BookingRepository;
+import com.campusbooking.repository.KitRepository;
 import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
 import com.campusbooking.repository.WaitlistRepository;
@@ -20,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,8 +46,119 @@ class CoreWorkflowIntegrationTest {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private UserRepository userRepository;
     @Autowired private ResourceRepository resourceRepository;
+    @Autowired private KitRepository kitRepository;
     @Autowired private BookingRepository bookingRepository;
     @Autowired private WaitlistRepository waitlistRepository;
+
+    @Test
+    @DisplayName("Expanded seeded catalogue preserves legacy resource IDs and kit compositions")
+    void expandedCataloguePreservesSeededIdentitiesAndKitRelationships() {
+        List<Resource> resources = resourceRepository.findAll().stream()
+                .sorted(Comparator.comparing(Resource::getId))
+                .toList();
+        assertThat(resources).hasSize(21);
+        assertThat(resources.subList(0, 9)).extracting(Resource::getId)
+                .containsExactly(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+        assertThat(resources.subList(0, 9)).extracting(Resource::getName)
+                .containsExactly("Study Room A", "Computer Lab 101", "Projector Unit #3",
+                        "DSLR 4K Camera", "Heavy-Duty Tripod", "Shotgun Mic Kit",
+                        "Studio Podcast Mic", "Audio Interface Mixer", "Studio Monitor Headphones");
+        assertThat(resources.get(0).getLocation()).isEqualTo("Library, Level 2, A");
+        assertThat(resources.get(0).getCapacity()).isEqualTo(6);
+        assertThat(resources.get(2).getStatus()).isEqualTo(Resource.Status.MAINTENANCE);
+        assertThat(resources.get(2).getCapacity()).isNull();
+
+        List<Kit> kits = kitRepository.findAllWithResources().stream()
+                .sorted(Comparator.comparing(Kit::getId))
+                .toList();
+        assertThat(kits).hasSize(4);
+        assertThat(kits).extracting(Kit::getName)
+                .containsExactly("Media Production Kit", "Podcast Recording Kit",
+                        "Hybrid Teaching Kit", "Field Interview Kit");
+        assertThat(kits.get(0).getResources()).extracting(Resource::getId)
+                .containsExactlyInAnyOrder(4L, 5L, 6L);
+        assertThat(kits.get(1).getResources()).extracting(Resource::getId)
+                .containsExactlyInAnyOrder(7L, 8L, 9L);
+        assertThat(kits.get(2).getResources()).extracting(Resource::getId)
+                .containsExactlyInAnyOrder(18L, 19L);
+        assertThat(kits.get(3).getResources()).extracting(Resource::getId)
+                .containsExactlyInAnyOrder(4L, 5L, 20L, 21L);
+    }
+
+    @Test
+    @DisplayName("Resource API serializes seeded location and capacity metadata")
+    void resourceApiReturnsMetadata() throws Exception {
+        String body = mockMvc.perform(get("/api/resources")
+                        .with(user("alice_student").roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode resources = objectMapper.readTree(body);
+        assertThat(resources.size()).isEqualTo(21);
+        JsonNode studyRoom = null;
+        for (JsonNode resource : resources) {
+            if ("Study Room A".equals(resource.path("name").asText())) {
+                studyRoom = resource;
+                break;
+            }
+        }
+        assertThat(studyRoom).isNotNull();
+        assertThat(studyRoom.path("location").asText()).isEqualTo("Library, Level 2, A");
+        assertThat(studyRoom.path("capacity").asInt()).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("Admin resource creation persists and returns location and capacity")
+    void resourceCreationPersistsMetadata() throws Exception {
+        String name = "Metadata Test Lab";
+        String body = """
+                {"name":"Metadata Test Lab","type":"LAB","description":"Test lab",
+                 "location":"Computing Building, Level 4","capacity":12,"status":"AVAILABLE"}
+                """;
+
+        String response = mockMvc.perform(post("/api/resources")
+                        .with(user("bob_admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.location").value("Computing Building, Level 4"))
+                .andExpect(jsonPath("$.capacity").value(12))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(objectMapper.readTree(response).path("name").asText()).isEqualTo(name);
+        Resource saved = resourceRepository.findByName(name).orElseThrow();
+        assertThat(saved.getLocation()).isEqualTo("Computing Building, Level 4");
+        assertThat(saved.getCapacity()).isEqualTo(12);
+    }
+
+    @Test
+    @DisplayName("Resource API rejects zero capacity with a clear validation message")
+    void resourceCreationRejectsNonPositiveCapacity() throws Exception {
+        mockMvc.perform(post("/api/resources")
+                        .with(user("bob_admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Invalid Capacity Lab","type":"LAB","capacity":0,"status":"AVAILABLE"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("capacity: must be a positive whole number"));
+    }
+
+    @Test
+    @DisplayName("Resource API allows equipment without a capacity")
+    void resourceCreationAllowsNullEquipmentCapacity() throws Exception {
+        mockMvc.perform(post("/api/resources")
+                        .with(user("bob_admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Null Capacity Equipment","type":"EQUIPMENT","capacity":null,"status":"AVAILABLE"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.capacity").value(org.hamcrest.Matchers.nullValue()));
+
+        assertThat(resourceRepository.findByName("Null Capacity Equipment").orElseThrow().getCapacity())
+                .isNull();
+    }
 
     @Test
     @DisplayName("Cancelling through the API creates an exact-slot offer without creating a booking")

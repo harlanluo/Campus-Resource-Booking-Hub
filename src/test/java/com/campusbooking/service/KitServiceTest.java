@@ -46,6 +46,21 @@ class KitServiceTest {
     }
 
     @Test
+    @DisplayName("Kit responses expose child operational status for derived readiness")
+    void getAllKits_returnsChildOperationalStatus() {
+        Resource unavailableResource = Resource.builder().id(11L).name("Camera").type("EQUIPMENT")
+                .status(Resource.Status.MAINTENANCE).build();
+        Kit notReadyKit = Kit.builder().id(2L).name("Media Kit").description("Complete bundle")
+                .resources(Set.of(unavailableResource)).build();
+        given(kitRepository.findAllWithResources()).willReturn(List.of(notReadyKit));
+
+        KitResponseDTO result = kitService.getAllKits().get(0);
+
+        assertThat(result.getItems()).extracting(KitResponseDTO.KitItemDTO::getStatus)
+                .containsExactly(Resource.Status.MAINTENANCE);
+    }
+
+    @Test
     @DisplayName("Returns one configured Kit")
     void getKitById_returnsDto() {
         given(kitRepository.findByIdWithResources(1L)).willReturn(Optional.of(kit));

@@ -62,6 +62,23 @@ class ResourceServiceTest {
     }
 
     @Test
+    @DisplayName("Resource edits retain updated location and capacity metadata")
+    void updateResource_copiesLocationAndCapacity() {
+        Resource existing = Resource.builder().id(1L).name("Old Lab").type("LAB")
+                .status(Resource.Status.AVAILABLE).build();
+        Resource updated = Resource.builder().name("New Lab").type("LAB")
+                .description("Updated lab").location("Computing Building, Level 2")
+                .capacity(24).status(Resource.Status.AVAILABLE).build();
+        given(resourceRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(resourceRepository.save(any(Resource.class))).willAnswer(inv -> inv.getArgument(0));
+
+        Resource result = resourceService.updateResource(1L, updated);
+
+        assertThat(result.getLocation()).isEqualTo("Computing Building, Level 2");
+        assertThat(result.getCapacity()).isEqualTo(24);
+    }
+
+    @Test
     @DisplayName("Resource deletion is blocked when the resource belongs to a Kit")
     void deleteResource_inKitIsRejected() {
         given(resourceRepository.existsById(1L)).willReturn(true);

@@ -17,9 +17,12 @@ CREATE TABLE IF NOT EXISTS resources (
     name        VARCHAR(100) NOT NULL UNIQUE,
     type        VARCHAR(50)  NOT NULL,
     description VARCHAR(500),
+    location    VARCHAR(160),
+    capacity    INTEGER,
     manual_maintenance BOOLEAN NOT NULL DEFAULT FALSE,
     status      VARCHAR(20)  NOT NULL DEFAULT 'AVAILABLE'
-        CHECK (status IN ('AVAILABLE', 'UNAVAILABLE', 'MAINTENANCE'))
+        CHECK (status IN ('AVAILABLE', 'UNAVAILABLE', 'MAINTENANCE')),
+    CONSTRAINT chk_resource_capacity CHECK (capacity IS NULL OR capacity > 0)
 );
 
 -- Pre-configured Resource Bundles / Project Kits

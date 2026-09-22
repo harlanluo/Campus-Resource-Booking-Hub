@@ -4,6 +4,7 @@ import com.campusbooking.model.Resource;
 import com.campusbooking.dto.AvailabilityResponseDTO;
 import com.campusbooking.service.AvailabilityService;
 import com.campusbooking.service.ResourceService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -98,7 +99,7 @@ public class ResourceController {
      */
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Resource> createResource(@RequestBody Resource resource) {
+    public ResponseEntity<Resource> createResource(@Valid @RequestBody Resource resource) {
         Resource saved = resourceService.createResource(resource);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
@@ -121,7 +122,7 @@ public class ResourceController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Resource> updateResource(
             @PathVariable Long id,
-            @RequestBody Resource updated) {
+            @Valid @RequestBody Resource updated) {
 
         Resource result = resourceService.updateResource(id, updated);
         return ResponseEntity.ok(result);
