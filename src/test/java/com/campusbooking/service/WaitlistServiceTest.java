@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class WaitlistServiceTest {
@@ -116,13 +117,13 @@ class WaitlistServiceTest {
     }
 
     @Test
-    void releaseOffersFirstEligibleOverlappingEntryWithoutCreatingBooking() {
-        LocalDateTime releasedStart = start.minusMinutes(30);
-        LocalDateTime releasedEnd = end.plusMinutes(30);
+    void releaseOffersFirstEligibleExactEntryWithoutCreatingBooking() {
+        LocalDateTime releasedStart = start;
+        LocalDateTime releasedEnd = end;
         Waitlist first = waiting(11L, student, start, end, LocalDateTime.now().minusMinutes(2));
-        Waitlist second = waiting(12L, otherStudent(), start.plusMinutes(30), end, LocalDateTime.now().minusMinutes(1));
+        Waitlist second = waiting(12L, otherStudent(), start, end, LocalDateTime.now().minusMinutes(1));
         given(resourceRepository.findByIdForUpdate(resource.getId())).willReturn(Optional.of(resource));
-        given(waitlistRepository.findWaitingAffectedByReleaseForUpdate(
+        given(waitlistRepository.findWaitingForExactReleasedSlotForUpdate(
                 resource.getId(), releasedStart, releasedEnd))
                 .willReturn(List.of(first, second));
         given(bookingRepository.findOverlappingBookings(
@@ -131,13 +132,6 @@ class WaitlistServiceTest {
         given(waitlistRepository.findActiveOffersOverlapping(
                 eq(resource.getId()), eq(first.getRequestedStart()), eq(first.getRequestedEnd()), any()))
                 .willReturn(List.of());
-        given(bookingRepository.findOverlappingBookings(
-                resource.getId(), second.getRequestedStart(), second.getRequestedEnd()))
-                .willReturn(List.of());
-        given(waitlistRepository.findActiveOffersOverlapping(
-                eq(resource.getId()), eq(second.getRequestedStart()), eq(second.getRequestedEnd()), any()))
-                .willReturn(List.of(first));
-
         service.offerReleasedSlot(resource, releasedStart, releasedEnd);
 
         assertThat(first.getStatus()).isEqualTo(Waitlist.Status.OFFERED);
@@ -145,8 +139,7 @@ class WaitlistServiceTest {
         assertThat(second.getStatus()).isEqualTo(Waitlist.Status.WAITING);
         then(bookingRepository).should().findOverlappingBookings(
                 resource.getId(), first.getRequestedStart(), first.getRequestedEnd());
-        then(bookingRepository).should().findOverlappingBookings(
-                resource.getId(), second.getRequestedStart(), second.getRequestedEnd());
+        then(waitlistRepository).should(never()).save(second);
     }
 
     @Test
@@ -188,11 +181,11 @@ class WaitlistServiceTest {
     }
 
     @Test
-    void declineAndExpiryReevaluateOverlappingRequestedIntervals() {
+    void declineAndExpiryReevaluateTheSameExactSlot() {
         Waitlist offer = offered(30L, student, start, end, LocalDateTime.now().plusMinutes(10));
-        Waitlist next = waiting(31L, otherStudent(), start.plusMinutes(15), end.minusMinutes(15), LocalDateTime.now());
+        Waitlist next = waiting(31L, otherStudent(), start, end, LocalDateTime.now());
         stubOwnedOffer(offer);
-        given(waitlistRepository.findWaitingAffectedByReleaseForUpdate(resource.getId(), start, end))
+        given(waitlistRepository.findWaitingForExactReleasedSlotForUpdate(resource.getId(), start, end))
                 .willReturn(List.of(next));
         given(bookingRepository.findOverlappingBookings(
                 resource.getId(), next.getRequestedStart(), next.getRequestedEnd())).willReturn(List.of());
@@ -207,7 +200,7 @@ class WaitlistServiceTest {
         Waitlist expired = offered(32L, student, start.plusHours(3), end.plusHours(3),
                 LocalDateTime.now().minusSeconds(1));
         stubOwnedOffer(expired);
-        given(waitlistRepository.findWaitingAffectedByReleaseForUpdate(
+        given(waitlistRepository.findWaitingForExactReleasedSlotForUpdate(
                 resource.getId(), expired.getRequestedStart(), expired.getRequestedEnd())).willReturn(List.of());
 
         assertThatThrownBy(() -> service.acceptOffer(student.getUsername(), expired.getId()))

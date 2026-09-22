@@ -245,6 +245,9 @@
               <button class="home-quick-link" type="button" data-home-target="bookings">
                 <span class="home-quick-link-icon" aria-hidden="true">▣</span><span><strong>My bookings</strong><small>Review requests and reservation history</small></span>
               </button>
+              <button class="home-quick-link" type="button" data-home-target="waitlist">
+                <span class="home-quick-link-icon" aria-hidden="true">↔</span><span><strong>Waitlist</strong><small>Review offers and queue activity</small></span>
+              </button>
             </div>
 
             <section class="home-waitlist-offer" id="homeWaitlistOffer" aria-labelledby="homeWaitlistOfferTitle" hidden>
@@ -265,7 +268,7 @@
         <div class="page-header">
           <div class="header-titles">
             <span class="section-eyebrow">Time-first booking</span>
-            <h1 class="page-title">Find availability</h1>
+            <h1 class="page-title" id="findAvailabilityHeading" tabindex="-1">Find availability</h1>
             <p class="page-subtitle">Choose when you need a resource, then see what's available.</p>
           </div>
         </div>
@@ -274,7 +277,7 @@
           <section id="timeFirstWhenSection" class="time-first-step" aria-labelledby="timeFirstWhenTitle">
             <div class="time-first-step-heading">
               <span class="time-first-step-number">1</span>
-              <div><h2 id="timeFirstWhenTitle">When?</h2><p>Set the date, start time, and how long you need it.</p></div>
+              <div><h2 id="timeFirstWhenTitle" tabindex="-1">When?</h2><p>Set the date, start time, and how long you need it.</p></div>
             </div>
             <form id="timeFirstSearchForm" class="time-first-search-form">
               <div class="time-first-form-grid">
@@ -339,7 +342,7 @@
             <div class="time-first-results-heading">
               <div class="time-first-step-heading">
                 <span class="time-first-step-number">2</span>
-                <div><h2 id="timeFirstResultsTitle">Available for your time</h2><p id="timeFirstInterval" class="time-first-interval"></p></div>
+                <div><h2 id="timeFirstResultsTitle" tabindex="-1">Available for your time</h2><p id="timeFirstInterval" class="time-first-interval"></p></div>
               </div>
               <button type="button" class="btn btn-secondary btn-sm" id="timeFirstRefreshBtn">Refresh availability</button>
             </div>
@@ -353,7 +356,7 @@
               </button>
               <div class="time-first-step-heading">
                 <span class="time-first-step-number">3</span>
-                <div><h2 id="timeFirstReviewTitle">Review your request</h2><p>Check the details before sending it for approval.</p></div>
+                <div><h2 id="timeFirstReviewTitle" tabindex="-1">Review your request</h2><p>Check the details before sending it for approval.</p></div>
               </div>
             </div>
             <div id="timeFirstReviewDetails" class="time-first-review-details"></div>
@@ -378,11 +381,11 @@
             </div>
           </section>
 
-          <section id="timeFirstSuccessSection" class="time-first-step time-first-success" hidden aria-live="polite">
+          <section id="timeFirstSuccessSection" class="time-first-step time-first-success" hidden aria-live="polite" aria-labelledby="timeFirstSuccessTitle">
             <div class="booking-success-state">
               <div class="booking-success-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg></div>
               <p class="section-eyebrow">Request sent</p>
-              <h2 class="booking-success-title">Your request is awaiting approval</h2>
+              <h2 class="booking-success-title" id="timeFirstSuccessTitle" tabindex="-1">Your request is awaiting approval</h2>
               <p class="booking-success-message">An Admin will review this reservation before it is confirmed.</p>
               <div class="booking-success-details">
                 <div class="booking-success-detail"><span>Resource</span><strong id="timeFirstSuccessResource"></strong></div>
@@ -480,6 +483,19 @@
           </div>
         </div>
 
+        <section class="student-action-success" id="myBookingsSuccess" role="status" aria-live="polite" hidden>
+          <span class="student-action-success-icon" aria-hidden="true">✓</span>
+          <div class="student-action-success-copy">
+            <strong id="myBookingsSuccessTitle">Request updated</strong>
+            <p id="myBookingsSuccessMessage"></p>
+            <span id="myBookingsSuccessDetail"></span>
+          </div>
+          <div class="student-action-success-actions">
+            <button type="button" class="btn btn-secondary btn-sm" id="myBookingsSuccessViewBtn">Review booking</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="myBookingsSuccessDismissBtn" aria-label="Dismiss success message">Dismiss</button>
+          </div>
+        </section>
+
         <!-- Section: Upcoming and booking history -->
         <div class="section-container">
           <div class="booking-view-header">
@@ -531,7 +547,7 @@
         <div class="info-callout">
           <div class="callout-icon" aria-hidden="true">i</div>
           <div class="callout-content">
-            <strong>Exact-slot offers:</strong> If your requested time opens, you will receive a private 15-minute offer to accept or decline. A booking request is created only after you accept.
+            <strong>Exact-slot offers:</strong> If your requested time opens, you will receive a private 15-minute offer to accept or decline. Accepting creates a normal booking request, which still needs Admin approval.
           </div>
         </div>
 
@@ -695,7 +711,7 @@
             </h2>
             <span class="count-badge" id="adminWaitlistCountBadge">0 active slots</span>
           </div>
-          <p class="booking-view-description">Read-only view of exact-slot queues and current offers. Student identities stay private.</p>
+          <p class="booking-view-description">Exact-slot status, queue size, and offer expiry are shown here. Student identities stay private. Students must accept an offer before it creates a booking request, which then follows the normal Admin approval queue.</p>
 
           <div class="table-responsive">
             <table class="admin-table" id="adminWaitlistTable">
@@ -703,8 +719,8 @@
                 <tr>
                   <th>Resource</th>
                   <th>Requested Slot</th>
-                  <th>Waiting</th>
-                  <th>Offer Status</th>
+                  <th>Status</th>
+                  <th>Queue</th>
                   <th>Offer Expires</th>
                 </tr>
               </thead>
@@ -1080,19 +1096,44 @@
         <button class="modal-close-btn" type="button" id="closeIssueModalBtn" aria-label="Close issue report dialog">&times;</button>
       </div>
 
-      <form id="issueForm" class="modal-form">
+      <form id="issueForm" class="modal-form" novalidate>
         <input type="hidden" id="issueResourceId" />
         <div class="form-group">
           <label for="issueDescription">Issue Description <span class="required">*</span></label>
-          <textarea id="issueDescription" rows="4" maxlength="500" required
+          <textarea id="issueDescription" rows="4" maxlength="500" required aria-describedby="issueDescriptionHelp issueDescriptionError"
                     placeholder="Briefly describe what is broken, unsafe, or not working..."></textarea>
-          <span class="form-help-text">An administrator will review this report before the resource is placed in maintenance.</span>
+          <p class="field-error" id="issueDescriptionError" role="alert" hidden></p>
+          <div class="issue-description-meta">
+            <span class="form-help-text" id="issueDescriptionHelp">An administrator can review this report and decide whether the resource needs maintenance.</span>
+            <span class="issue-character-count" id="issueDescriptionCount" aria-live="polite">0 / 500</span>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" id="cancelIssueModalBtn">Cancel</button>
-          <button type="submit" class="btn btn-warning-action" id="submitIssueBtn">Submit Issue Report</button>
+          <button type="submit" class="btn btn-primary" id="submitIssueBtn">Submit issue report</button>
         </div>
       </form>
+
+      <section class="issue-success-state" id="issueSuccessState" role="status" aria-live="polite" hidden>
+        <div class="booking-success-icon" aria-hidden="true">✓</div>
+        <span class="step-kicker">Issue reported</span>
+        <h4>Thank you for letting us know</h4>
+        <p>The facilities team can now review this report.</p>
+        <strong class="issue-success-resource" id="issueSuccessResource"></strong>
+        <div class="modal-footer issue-state-actions">
+          <button type="button" class="btn btn-ghost context-back-button" id="issueSuccessBackBtn"><span aria-hidden="true">←</span> Back to resource</button>
+          <button type="button" class="btn btn-primary" id="issueSuccessHistoryBtn">View my reports</button>
+        </div>
+      </section>
+
+      <section class="issue-history-state" id="issueHistoryState" aria-labelledby="issueHistoryTitle" hidden>
+        <h4 id="issueHistoryTitle" tabindex="-1">My reported issues</h4>
+        <div class="issue-history-list" id="issueHistoryList" aria-live="polite"></div>
+        <div class="modal-footer issue-state-actions">
+          <button type="button" class="btn btn-ghost context-back-button" id="issueHistoryBackBtn"><span aria-hidden="true">←</span> Back to resource</button>
+          <button type="button" class="btn btn-primary" id="issueHistoryReportBtn">Report another issue</button>
+        </div>
+      </section>
     </div>
   </div>
 

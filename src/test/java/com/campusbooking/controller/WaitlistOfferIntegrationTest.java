@@ -149,7 +149,53 @@ class WaitlistOfferIntegrationTest {
     }
 
     @Test
-    void cancellingLargerBookingOffersContainedRequestButRemainingBlockerPreventsOffer()
+    void adminCancellationOffersExactSlotAndMineApiReturnsUpdatedState() throws Exception {
+        Fixture fixture = fixture("task5-admin-cancel-repro");
+        LocalDateTime start = LocalDateTime.of(2031, 4, 15, 9, 0, 17);
+        LocalDateTime end = LocalDateTime.of(2031, 4, 15, 11, 0, 17);
+        Booking blocking = booking(fixture.owner, fixture.resource, start, end, Booking.Status.APPROVED);
+        Waitlist waiting = wait(fixture.first, fixture.resource, start, end,
+                LocalDateTime.of(2031, 4, 14, 12, 0));
+        Waitlist nextExact = wait(fixture.second, fixture.resource, start, end,
+                LocalDateTime.of(2031, 4, 14, 12, 1));
+        Waitlist differentStart = wait(fixture.third, fixture.resource,
+                start.plusMinutes(30), end, LocalDateTime.of(2031, 4, 14, 12, 2));
+        Waitlist differentEnd = wait(fixture.owner, fixture.resource,
+                start, end.plusMinutes(30), LocalDateTime.of(2031, 4, 14, 12, 3));
+        Resource otherResource = resource("Other task5-admin-cancel-repro", Resource.Status.AVAILABLE);
+        Waitlist differentResource = wait(fixture.third, otherResource, start, end,
+                LocalDateTime.of(2031, 4, 14, 12, 4));
+
+        System.out.printf("TASK5 BUG A REPRO: resourceId=%d resourceName=%s start=%s end=%s blockingBookingId=%d waitlistEntryId=%d%n",
+                fixture.resource.getId(), fixture.resource.getName(), start, end, blocking.getId(), waiting.getId());
+
+        mockMvc.perform(put("/api/bookings/{id}/cancel", blocking.getId())
+                        .with(user("waitlist-admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        mockMvc.perform(get("/api/waitlists/mine")
+                        .with(user(fixture.first.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(waiting.getId()))
+                .andExpect(jsonPath("$[0].resourceId").value(fixture.resource.getId()))
+                .andExpect(jsonPath("$[0].requestedStart").value(start.toString()))
+                .andExpect(jsonPath("$[0].requestedEnd").value(end.toString()))
+                .andExpect(jsonPath("$[0].status").value("OFFERED"))
+                .andExpect(jsonPath("$[0].offerExpiresAt").isNotEmpty());
+
+        assertThat(waitlistRepository.findById(nextExact.getId()).orElseThrow().getStatus())
+                .isEqualTo(Waitlist.Status.WAITING);
+        assertThat(waitlistRepository.findById(differentStart.getId()).orElseThrow().getStatus())
+                .isEqualTo(Waitlist.Status.WAITING);
+        assertThat(waitlistRepository.findById(differentEnd.getId()).orElseThrow().getStatus())
+                .isEqualTo(Waitlist.Status.WAITING);
+        assertThat(waitlistRepository.findById(differentResource.getId()).orElseThrow().getStatus())
+                .isEqualTo(Waitlist.Status.WAITING);
+    }
+
+    @Test
+    void cancellingLargerBookingDoesNotOfferNonMatchingContainedRequest()
             throws Exception {
         Fixture fixture = fixture("contained-cancel");
         LocalDateTime requestedStart = fixture.start.plusMinutes(30);
@@ -164,7 +210,7 @@ class WaitlistOfferIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
         assertThat(waitlistRepository.findById(eligible.getId()).orElseThrow().getStatus())
-                .isEqualTo(Waitlist.Status.OFFERED);
+                .isEqualTo(Waitlist.Status.WAITING);
 
         Fixture blockedFixture = fixture("remaining-blocker");
         LocalDateTime blockedStart = blockedFixture.start.plusMinutes(30);
@@ -184,7 +230,7 @@ class WaitlistOfferIntegrationTest {
     }
 
     @Test
-    void rejectingLargerPendingBookingOffersContainedRequest() throws Exception {
+    void rejectingLargerPendingBookingDoesNotOfferNonMatchingContainedRequest() throws Exception {
         Fixture fixture = fixture("contained-reject");
         LocalDateTime requestedStart = fixture.start.plusMinutes(30);
         LocalDateTime requestedEnd = fixture.end.minusMinutes(30);
@@ -198,28 +244,27 @@ class WaitlistOfferIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
         assertThat(waitlistRepository.findById(eligible.getId()).orElseThrow().getStatus())
-                .isEqualTo(Waitlist.Status.OFFERED);
+                .isEqualTo(Waitlist.Status.WAITING);
     }
 
     @Test
-    void oneReleaseCanOfferNonOverlappingRequestsButNeverOverlappingRequests() {
-        Fixture fixture = fixture("compatible-holds");
-        LocalDateTime midpoint = fixture.start.plusHours(1);
-        Waitlist first = wait(fixture.first, fixture.resource, fixture.start, midpoint,
+    void adminRejectionOffersNextExactSlotEntryOnly() throws Exception {
+        Fixture fixture = fixture("admin-reject-exact");
+        Booking blocking = booking(fixture.owner, fixture.resource, fixture.start, fixture.end,
+                Booking.Status.PENDING);
+        Waitlist first = wait(fixture.first, fixture.resource, fixture.start, fixture.end,
                 LocalDateTime.now().minusMinutes(3));
-        Waitlist second = wait(fixture.second, fixture.resource, midpoint, fixture.end,
+        Waitlist second = wait(fixture.second, fixture.resource, fixture.start, fixture.end,
                 LocalDateTime.now().minusMinutes(2));
-        Waitlist incompatible = wait(fixture.third, fixture.resource,
-                fixture.start.plusMinutes(30), midpoint.plusMinutes(30),
-                LocalDateTime.now().minusMinutes(1));
 
-        waitlistService.offerReleasedSlot(fixture.resource, fixture.start, fixture.end);
+        mockMvc.perform(put("/api/bookings/{id}/reject", blocking.getId())
+                        .with(user("waitlist-admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
 
         assertThat(waitlistRepository.findById(first.getId()).orElseThrow().getStatus())
                 .isEqualTo(Waitlist.Status.OFFERED);
         assertThat(waitlistRepository.findById(second.getId()).orElseThrow().getStatus())
-                .isEqualTo(Waitlist.Status.OFFERED);
-        assertThat(waitlistRepository.findById(incompatible.getId()).orElseThrow().getStatus())
                 .isEqualTo(Waitlist.Status.WAITING);
     }
 
@@ -255,6 +300,7 @@ class WaitlistOfferIntegrationTest {
         assertThat(row).isNotNull();
         assertThat(row.get("waitingCount").asLong()).isEqualTo(1);
         assertThat(row.get("activeOffer").asBoolean()).isTrue();
+        assertThat(row.get("status").asText()).isEqualTo("OFFERED");
         assertThat(row.get("offerExpiresAt").isNull()).isFalse();
         assertThat(body).doesNotContain(fixture.first.getUsername(), fixture.second.getUsername(),
                 fixture.first.getEmail(), fixture.second.getEmail());
@@ -363,6 +409,43 @@ class WaitlistOfferIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(joinJson(fixture.resource.getId(), fixture.start, fixture.end)))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    void mineIncludesOwnWaitlistHistoryWithoutShowingAnotherStudentsEntries() throws Exception {
+        Fixture fixture = fixture("mine-history");
+        Waitlist accepted = wait(fixture.first, fixture.resource, fixture.start, fixture.end,
+                LocalDateTime.now().minusMinutes(4));
+        accepted.setStatus(Waitlist.Status.ACCEPTED);
+        waitlistRepository.saveAndFlush(accepted);
+        Waitlist declined = wait(fixture.first, fixture.resource, fixture.start.plusHours(3), fixture.end.plusHours(3),
+                LocalDateTime.now().minusMinutes(3));
+        declined.setStatus(Waitlist.Status.DECLINED);
+        waitlistRepository.saveAndFlush(declined);
+        Waitlist expired = wait(fixture.first, fixture.resource, fixture.start.plusHours(6), fixture.end.plusHours(6),
+                LocalDateTime.now().minusMinutes(2));
+        expired.setStatus(Waitlist.Status.EXPIRED);
+        waitlistRepository.saveAndFlush(expired);
+        Waitlist left = wait(fixture.first, fixture.resource, fixture.start.plusHours(9), fixture.end.plusHours(9),
+                LocalDateTime.now().minusMinutes(1));
+        left.setStatus(Waitlist.Status.LEFT);
+        waitlistRepository.saveAndFlush(left);
+        wait(fixture.second, fixture.resource, fixture.start, fixture.end, LocalDateTime.now());
+
+        mockMvc.perform(get("/api/waitlists/mine")
+                        .with(user(fixture.first.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(4)))
+                .andExpect(jsonPath("$[*].status", org.hamcrest.Matchers.containsInAnyOrder(
+                        "ACCEPTED", "DECLINED", "EXPIRED", "LEFT")))
+                .andExpect(jsonPath("$[*].resourceName",
+                        org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.equalTo(fixture.resource.getName()))));
+
+        mockMvc.perform(get("/api/waitlists/mine")
+                        .with(user(fixture.second.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$[0].status").value("WAITING"));
     }
 
     @Test

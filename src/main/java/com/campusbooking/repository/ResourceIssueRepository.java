@@ -12,6 +12,8 @@ public interface ResourceIssueRepository extends JpaRepository<ResourceIssue, Lo
 
     List<ResourceIssue> findAllByOrderByReportedTimeDesc();
 
+    List<ResourceIssue> findByReporterIdOrderByReportedTimeDesc(Long reporterId);
+
     boolean existsByResourceIdAndStatusAndIdNot(
             Long resourceId, ResourceIssue.Status status, Long excludedIssueId);
 }

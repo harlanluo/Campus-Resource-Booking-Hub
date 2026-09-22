@@ -40,7 +40,7 @@ public class WaitlistController {
 
     @GetMapping("/mine")
     public ResponseEntity<List<WaitlistResponseDTO>> mine(Authentication authentication) {
-        return ResponseEntity.ok(waitlistService.getOwnActiveEntries(authentication.getName()));
+        return ResponseEntity.ok(waitlistService.getOwnEntries(authentication.getName()));
     }
 
     @GetMapping("/admin/overview")

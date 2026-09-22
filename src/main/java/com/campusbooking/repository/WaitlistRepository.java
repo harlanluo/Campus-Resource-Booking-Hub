@@ -25,6 +25,8 @@ public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
 
     List<Waitlist> findByUserId(Long userId);
 
+    List<Waitlist> findByUserIdOrderByRequestTimeDescIdDesc(Long userId);
+
     @Query("""
            SELECT w FROM Waitlist w
            WHERE w.status IN :statuses
@@ -52,11 +54,11 @@ public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
            SELECT w FROM Waitlist w
            WHERE w.resource.id = :resourceId
              AND w.status = com.campusbooking.model.Waitlist.Status.WAITING
-             AND w.requestedStart < :releasedEnd
-             AND w.requestedEnd > :releasedStart
+             AND w.requestedStart = :releasedStart
+             AND w.requestedEnd = :releasedEnd
            ORDER BY w.requestTime, w.id
            """)
-    List<Waitlist> findWaitingAffectedByReleaseForUpdate(
+    List<Waitlist> findWaitingForExactReleasedSlotForUpdate(
             @Param("resourceId") Long resourceId,
             @Param("releasedStart") LocalDateTime releasedStart,
             @Param("releasedEnd") LocalDateTime releasedEnd);

@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +26,11 @@ public class ResourceIssueController {
     public ResponseEntity<IssueResponseDTO> reportIssue(
             @Valid @RequestBody IssueReportRequestDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(issueService.reportIssue(request));
+    }
+
+    @GetMapping("/mine")
+    public ResponseEntity<List<IssueResponseDTO>> getOwnIssues(Authentication authentication) {
+        return ResponseEntity.ok(issueService.getOwnIssues(authentication.getName()));
     }
 
     @GetMapping

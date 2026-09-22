@@ -15,6 +15,9 @@ const state = {
   userKitBookings: [],
   userKitBookingHistory: [],
   userWaitlists: [],
+  userIssues: [],
+  myBookingsSuccess: null,
+  issueModalView: 'FORM',
   adminBookings: [],
   adminBookingHistory: [],
   adminKitBookings: [],
@@ -44,6 +47,9 @@ const state = {
   timeFirstSuccess: null,
   timeFirstConflict: false,
   timeFirstSubmitting: false,
+  timeFirstRequestSequence: 0,
+  sessionGeneration: 0,
+  waitlistRequestSequence: 0,
   resourceLoadError: null,
   kitLoadError: null,
   resourcesLoaded: false,
@@ -52,6 +58,8 @@ const state = {
   adminHistoryLoadError: null,
   adminDataLoaded: false,
   userDataLoaded: false,
+  homeReservationError: false,
+  waitlistLoadError: false,
 };
 
 // Local catalogue artwork is mapped by the seeded resource/kit identity.
@@ -231,6 +239,7 @@ const elements = {
   homeWaitlistOfferBtn: document.getElementById('homeWaitlistOfferBtn'),
 
   // Time-first availability search
+  timeFirstWhenSection: document.getElementById('timeFirstWhenSection'),
   timeFirstSearchForm: document.getElementById('timeFirstSearchForm'),
   timeFirstDate: document.getElementById('timeFirstDate'),
   timeFirstStart: document.getElementById('timeFirstStart'),
@@ -381,8 +390,26 @@ const elements = {
   issueForm: document.getElementById('issueForm'),
   issueResourceId: document.getElementById('issueResourceId'),
   issueDescription: document.getElementById('issueDescription'),
+  issueDescriptionError: document.getElementById('issueDescriptionError'),
+  issueDescriptionCount: document.getElementById('issueDescriptionCount'),
   modalIssueResourceName: document.getElementById('modalIssueResourceName'),
   submitIssueBtn: document.getElementById('submitIssueBtn'),
+  issueFormTitle: document.getElementById('modalIssueTitle'),
+  issueSuccessState: document.getElementById('issueSuccessState'),
+  issueSuccessResource: document.getElementById('issueSuccessResource'),
+  issueSuccessBackBtn: document.getElementById('issueSuccessBackBtn'),
+  issueSuccessHistoryBtn: document.getElementById('issueSuccessHistoryBtn'),
+  issueHistoryState: document.getElementById('issueHistoryState'),
+  issueHistoryTitle: document.getElementById('issueHistoryTitle'),
+  issueHistoryList: document.getElementById('issueHistoryList'),
+  issueHistoryBackBtn: document.getElementById('issueHistoryBackBtn'),
+  issueHistoryReportBtn: document.getElementById('issueHistoryReportBtn'),
+  myBookingsSuccess: document.getElementById('myBookingsSuccess'),
+  myBookingsSuccessTitle: document.getElementById('myBookingsSuccessTitle'),
+  myBookingsSuccessMessage: document.getElementById('myBookingsSuccessMessage'),
+  myBookingsSuccessDetail: document.getElementById('myBookingsSuccessDetail'),
+  myBookingsSuccessViewBtn: document.getElementById('myBookingsSuccessViewBtn'),
+  myBookingsSuccessDismissBtn: document.getElementById('myBookingsSuccessDismissBtn'),
 
   // Toast Container
   toastContainer: document.getElementById('toastContainer'),
@@ -415,7 +442,33 @@ const STATUS_LABELS = Object.freeze({
   CLOSED: 'Closed',
   BOOKED: 'Booked',
   HELD: 'Temporarily held',
-  PAST: 'Past'
+  PAST: 'Past',
+  LEFT: 'Left waitlist'
+});
+
+const STUDENT_STATUS_LABELS = Object.freeze({
+  booking: Object.freeze({
+    PENDING: 'Awaiting approval',
+    APPROVED: 'Confirmed',
+    CONFIRMED: 'Confirmed',
+    COMPLETED: 'Completed',
+    REJECTED: 'Rejected',
+    CANCELLED: 'Cancelled'
+  }),
+  waitlist: Object.freeze({
+    WAITING: 'Waiting',
+    OFFERED: 'Slot available',
+    ACCEPTED: 'Accepted',
+    DECLINED: 'Declined',
+    EXPIRED: 'Expired',
+    LEFT: 'Left waitlist'
+  }),
+  issue: Object.freeze({
+    PENDING: 'Awaiting review',
+    OPEN: 'In progress',
+    REJECTED: 'Closed',
+    RESOLVED: 'Resolved'
+  })
 });
 
 const RESOURCE_TYPE_LABELS = Object.freeze({
@@ -439,8 +492,8 @@ function humanize(value) {
 }
 
 function getStatusLabel(status, options = {}) {
-  if (status === 'PENDING' && options.history) return 'Expired request';
-  return STATUS_LABELS[status] || humanize(status);
+  if (options.domain === 'booking' && status === 'PENDING' && options.history) return 'Expired request';
+  return STUDENT_STATUS_LABELS[options.domain]?.[status] || STATUS_LABELS[status] || humanize(status);
 }
 
 function getResourceTypeLabel(type) {
@@ -449,6 +502,26 @@ function getResourceTypeLabel(type) {
 
 function getResourceStatusLabel(status) {
   return RESOURCE_STATUS_LABELS[status] || getStatusLabel(status);
+}
+
+function getBookingStatusLabel(status, history = false) {
+  return getStatusLabel(status, { domain: 'booking', history });
+}
+
+function getWaitlistStatusLabel(status) {
+  return getStatusLabel(status, { domain: 'waitlist' });
+}
+
+function getIssueStatusLabel(status) {
+  return getStatusLabel(status, { domain: 'issue' });
+}
+
+function getStudentErrorMessage(error, fallback) {
+  if (error?.status === 401) return 'Your session has expired. Sign in again.';
+  if (error?.status === 403) return 'You do not have permission to complete this action.';
+  if (error?.status === 404) return 'This item is no longer available. Refresh and try again.';
+  if (error?.status === 409) return 'This request can no longer be completed. Refresh and try again.';
+  return fallback;
 }
 
 function getRoleLabel(role) {
@@ -710,10 +783,7 @@ const api = {
 
   async downloadReceipt(id) {
     const res = await fetch(`/api/bookings/${id}/receipt`);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Failed to download booking receipt');
-    }
+    if (!res.ok) throw await responseError(res, 'Failed to download booking receipt');
     return {
       blob: await res.blob(),
       filename: getDownloadFilename(res.headers.get('Content-Disposition')) || `booking-${id}-receipt.pdf`
@@ -777,16 +847,19 @@ const api = {
     return res.json();
   },
 
+  async getMyIssues() {
+    const res = await fetch('/api/issues/mine');
+    if (!res.ok) throw await responseError(res, 'Failed to fetch your issue reports');
+    return res.json();
+  },
+
   async reportIssue(data) {
     const res = await fetch('/api/issues', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Failed to report resource issue');
-    }
+    if (!res.ok) throw await responseError(res, 'Failed to report resource issue');
     return res.json();
   },
 
@@ -918,8 +991,6 @@ function openManagedModal(backdrop, initialFocus, closeHandler) {
 
 function closeManagedModal(backdrop, restoreFocus = true) {
   if (!backdrop) return;
-  backdrop.classList.remove('open');
-  backdrop.setAttribute('aria-hidden', 'true');
 
   if (modalState.active === backdrop) {
     const previousFocus = modalState.previousFocus;
@@ -928,10 +999,13 @@ function closeManagedModal(backdrop, restoreFocus = true) {
     modalState.previousFocus = null;
     document.body.classList.remove('modal-open');
     elements.app?.removeAttribute('inert');
-    if (restoreFocus && previousFocus?.focus) {
-      requestAnimationFrame(() => previousFocus.focus());
+    if (restoreFocus && previousFocus?.isConnected && previousFocus.focus
+        && !previousFocus.closest('[hidden], [inert], [aria-hidden="true"]')) {
+      previousFocus.focus();
     }
   }
+  backdrop.classList.remove('open');
+  backdrop.setAttribute('aria-hidden', 'true');
 }
 
 function closeActiveModal() {
@@ -1076,7 +1150,7 @@ function isActionableAdminIssue(issue) {
 }
 
 function getBookingDisplayStatus(booking, isHistory = false) {
-  return getStatusLabel(booking.status, { history: isHistory });
+  return getBookingStatusLabel(booking.status, isHistory);
 }
 
 function getLocalIsoString(date) {
@@ -1173,6 +1247,9 @@ function closeMobileNavigation() {
 }
 
 function resetPrivateState() {
+  state.sessionGeneration += 1;
+  state.waitlistRequestSequence += 1;
+  state.timeFirstRequestSequence += 1;
   state.currentUser = null;
   state.resources = [];
   state.kits = [];
@@ -1181,6 +1258,11 @@ function resetPrivateState() {
   state.userKitBookings = [];
   state.userKitBookingHistory = [];
   state.userWaitlists = [];
+  state.userIssues = [];
+  state.myBookingsSuccess = null;
+  state.issueModalView = 'FORM';
+  state.homeReservationError = false;
+  state.waitlistLoadError = false;
   state.adminBookings = [];
   state.adminBookingHistory = [];
   state.adminKitBookings = [];
@@ -1188,7 +1270,19 @@ function resetPrivateState() {
   state.adminWaitlistOverview = [];
   state.activeTab = 'home';
   state.activeNavKey = 'home';
+  state.contextRoute = null;
+  state.filterType = 'ALL';
+  state.filterOnlyAvailable = false;
+  state.searchQuery = '';
   state.bookingView = 'UPCOMING';
+  state.selectedResourceForBooking = null;
+  state.selectedKitForBooking = null;
+  state.selectedResourceForIssue = null;
+  state.availability = null;
+  state.availabilityWeekStart = null;
+  state.selectedScheduleStart = null;
+  state.selectedScheduleEnd = null;
+  state.selectedMobileDay = 0;
   state.timeFirstResults = [];
   state.timeFirstSearch = null;
   state.timeFirstSearchError = null;
@@ -1206,23 +1300,98 @@ function resetPrivateState() {
   state.adminHistoryLoadError = null;
   state.adminDataLoaded = false;
   state.userDataLoaded = false;
+
+  elements.timeFirstSearchForm?.reset();
+  initialiseTimeFirstSearchForm();
+  if (elements.timeFirstSearchNotice) setTimeFirstNotice('');
+  if (elements.timeFirstGroupMemberInput) elements.timeFirstGroupMemberInput.value = '';
+  if (elements.timeFirstSearchBtn) {
+    elements.timeFirstSearchBtn.disabled = false;
+    elements.timeFirstSearchBtn.textContent = 'Search availability';
+  }
+  if (elements.timeFirstSubmitBtn) {
+    elements.timeFirstSubmitBtn.disabled = false;
+    elements.timeFirstSubmitBtn.textContent = 'Send booking request';
+  }
+  renderTimeFirstGroupMembers();
+  renderTimeFirstWorkflow();
+  elements.timeFirstResultsGrid.innerHTML = '';
+  elements.timeFirstReviewDetails.innerHTML = '';
+  elements.timeFirstInterval.textContent = '';
+  elements.timeFirstConflictNotice.hidden = true;
+  elements.timeFirstSuccessResource.textContent = '';
+  elements.timeFirstSuccessTime.textContent = '';
+  elements.timeFirstSuccessSection.hidden = true;
+
+  elements.authLoginUsername.value = '';
+  elements.authLoginPassword.value = '';
+  elements.authRegisterUsername.value = '';
+  elements.authRegisterEmail.value = '';
+  elements.authRegisterPassword.value = '';
+  elements.authRegisterConfirmPassword.value = '';
+  elements.resourceSearchInput.value = '';
+  elements.onlyAvailableToggle.classList.remove('active');
+  elements.onlyAvailableToggle.setAttribute('aria-pressed', 'false');
+  elements.typeFilters.querySelectorAll('.chip').forEach((chip) => {
+    const selected = chip.dataset.filter === 'ALL';
+    chip.classList.toggle('active', selected);
+    chip.setAttribute('aria-pressed', selected ? 'true' : 'false');
+  });
+  elements.bookingForm?.reset();
+  elements.bookingResourceId.value = '';
+  elements.bookingIsKit.value = 'false';
+  elements.bookingKitId.value = '';
+  elements.groupMemberInput.value = '';
+  elements.groupMembersTagsContainer.innerHTML = '';
+  elements.bookingSuccessResource.textContent = '';
+  elements.bookingSuccessTime.textContent = '';
+  elements.modalResourceSubtitle.textContent = '';
+  elements.availabilitySummaryName.textContent = '';
+  resetBookingSuccessState();
+  elements.myBookingsSuccess.hidden = true;
+  elements.myBookingsSuccessTitle.textContent = '';
+  elements.myBookingsSuccessMessage.textContent = '';
+  elements.myBookingsSuccessDetail.textContent = '';
+  elements.myBookingsList.innerHTML = '';
+  elements.myWaitlistList.innerHTML = '';
+  elements.studentSnapshotGrid.innerHTML = '';
+  elements.homeUpcomingList.innerHTML = '';
+  elements.homeWaitlistOffer.hidden = true;
+  elements.resourcesGrid.innerHTML = '';
+  elements.resourceDetailContent.innerHTML = '';
+  elements.adminWaitlistTbody.innerHTML = '';
+  elements.issueForm?.reset();
+  elements.issueResourceId.value = '';
+  elements.issueDescriptionError.hidden = true;
+  elements.issueDescription.setAttribute('aria-invalid', 'false');
+  elements.issueDescriptionCount.textContent = '0 / 500';
+  elements.modalIssueResourceName.textContent = '';
+  elements.issueSuccessResource.textContent = '';
+  elements.issueHistoryList.innerHTML = '';
+  elements.issueSuccessState.hidden = true;
+  elements.issueHistoryState.hidden = true;
+  elements.issueForm.hidden = false;
+  elements.issueFormTitle.textContent = 'Report resource issue';
+  elements.submitIssueBtn.disabled = false;
 }
 
 function showAuthScreen(message = '', type = 'error') {
   closeActiveModal();
   resetPrivateState();
   closeMobileNavigation();
+  setAuthMode('signin', { keepNotice: Boolean(message) });
+  elements.authScreen.hidden = false;
+  elements.authLoginUsername.focus();
   elements.app.hidden = true;
   elements.app.setAttribute('aria-hidden', 'true');
-  elements.authScreen.hidden = false;
-  setAuthMode('signin', { keepNotice: Boolean(message) });
   setAuthNotice(message, type);
   elements.authLoginPassword.value = '';
 }
 
 async function showAuthenticatedShell(identity) {
+  closeActiveModal();
+  resetPrivateState();
   applyCurrentUser(identity);
-  elements.authScreen.hidden = true;
   elements.app.hidden = false;
   elements.app.setAttribute('aria-hidden', 'false');
   updateRoleBasedVisibility();
@@ -1237,8 +1406,9 @@ async function showAuthenticatedShell(identity) {
     history: contextualRoute ? 'none' : 'replace',
     skipLoad: true
   });
+  elements.authScreen.hidden = true;
   await loadAllData();
-  if (contextualRoute) renderContextualRoute(contextualRoute, { focus: false, refreshAvailability: true });
+  if (contextualRoute) renderContextualRoute(contextualRoute, { focus: true, refreshAvailability: true });
 }
 
 async function handleLoginSubmit(event) {
@@ -1293,6 +1463,7 @@ async function handleRegisterSubmit(event) {
   setAuthBusy(elements.registerSubmitBtn, true, 'Creating account…');
   try {
     await api.register({ username, email, password });
+    resetPrivateState();
     elements.authLoginUsername.value = username;
     elements.authLoginPassword.value = '';
     setAuthMode('signin', { keepNotice: true });
@@ -1361,10 +1532,28 @@ function contextualRouteKey(route) {
   return `${page}/${route.entityType}/${route.id}`;
 }
 
-function setBrowseContextView(view) {
-  elements.resourcesCatalogueView.hidden = view !== 'catalogue';
-  elements.resourceDetailPage.hidden = view !== 'detail';
-  elements.weeklyAvailabilityPage.hidden = view !== 'availability';
+function setBrowseContextView(view, options = {}) {
+  const views = {
+    catalogue: elements.resourcesCatalogueView,
+    detail: elements.resourceDetailPage,
+    availability: elements.weeklyAvailabilityPage
+  };
+  const targetView = views[view];
+  targetView.hidden = false;
+  if (options.focus) {
+    const heading = view === 'catalogue'
+      ? targetView.querySelector('h1')
+      : view === 'detail'
+        ? elements.resourceDetailContent.querySelector('h1')
+        : elements.modalBookingTitle;
+    if (heading) {
+      heading.setAttribute('tabindex', '-1');
+      heading.focus();
+    }
+  }
+  Object.entries(views).forEach(([key, item]) => {
+    if (key !== view) item.hidden = true;
+  });
   state.contextRoute = view === 'catalogue' ? null : state.contextRoute;
 }
 
@@ -1381,12 +1570,21 @@ function navigateToContextRoute(route, options = {}) {
     }, '',
       `${window.location.pathname}${window.location.search}#${routeKey}`);
   }
-  switchTab('browse', { navKey: 'resources', history: 'none', skipLoad: true });
+  switchTab('browse', { navKey: 'resources', history: 'none', skipLoad: true, focus: false });
   renderContextualRoute(route, {
     focus: options.focus !== false,
     forceReset: Boolean(options.forceReset),
     refreshAvailability: options.refreshAvailability
   });
+}
+
+function focusPanelHeading(panel, isAdmin) {
+  const heading = isAdmin
+    ? elements.adminPageTitle
+    : [...panel.querySelectorAll('h1')].find((item) => !item.closest('[hidden]'));
+  if (!heading) return;
+  heading.setAttribute('tabindex', '-1');
+  heading.focus();
 }
 
 function switchTab(tabId, options = {}) {
@@ -1414,6 +1612,12 @@ function switchTab(tabId, options = {}) {
   }
 
   const routeTitle = isAdmin ? ADMIN_ROUTES[navKey].title : STUDENT_ROUTES[navKey].title;
+  if (state.activeTab === 'find-availability' && tabId !== 'find-availability') {
+    state.timeFirstRequestSequence += 1;
+  }
+  if (!isAdmin && navKey === 'find-availability') {
+    resetTimeFirstWorkflow({ focus: false, resetCriteria: true });
+  }
   state.activeTab = tabId;
   state.activeNavKey = navKey;
   elements.mobileWorkspaceTitle.textContent = routeTitle;
@@ -1438,20 +1642,12 @@ function switchTab(tabId, options = {}) {
     }
   });
 
-  const panels = [elements.tabHome, elements.tabFindAvailability, elements.tabBrowse,
-    elements.tabMyBookings, elements.tabWaitlist, elements.tabAdmin];
-  panels.forEach((panel) => {
-    const active = panel.id === `tab-${tabId}`;
-    panel.classList.toggle('active', active);
-    panel.setAttribute('aria-hidden', active ? 'false' : 'true');
-  });
-
-  if (tabId === 'browse' && options.history !== 'none') setBrowseContextView('catalogue');
-
+  let activeAdminView = null;
   if (isAdmin) {
     const route = ADMIN_ROUTES[navKey];
-    document.querySelectorAll('[data-admin-view]').forEach((view) => {
-      view.hidden = view.dataset.adminView !== route.view;
+    activeAdminView = route.view;
+    document.querySelectorAll(`[data-admin-view="${activeAdminView}"]`).forEach((view) => {
+      view.hidden = false;
     });
     elements.adminPageTitle.textContent = route.title;
     elements.adminPageDescription.textContent = route.description;
@@ -1459,6 +1655,25 @@ function switchTab(tabId, options = {}) {
     if (activeNavButton) elements.tabAdmin.setAttribute('aria-labelledby', activeNavButton.id);
   } else {
     elements.tabAdmin.setAttribute('aria-labelledby', 'tabAdminBtn');
+  }
+
+  const panels = [elements.tabHome, elements.tabFindAvailability, elements.tabBrowse,
+    elements.tabMyBookings, elements.tabWaitlist, elements.tabAdmin];
+  const targetPanel = panels.find((panel) => panel.id === `tab-${tabId}`);
+  targetPanel.classList.add('active');
+  targetPanel.setAttribute('aria-hidden', 'false');
+  if (tabId === 'browse' && (options.history !== 'none' || options.showCatalogue)) {
+    setBrowseContextView('catalogue', { focus: options.focus !== false });
+  }
+  if (options.focus !== false) focusPanelHeading(targetPanel, isAdmin);
+  panels.filter((panel) => panel !== targetPanel).forEach((panel) => {
+    panel.classList.remove('active');
+    panel.setAttribute('aria-hidden', 'true');
+  });
+  if (isAdmin) {
+    document.querySelectorAll('[data-admin-view]').forEach((view) => {
+      view.hidden = view.dataset.adminView !== activeAdminView;
+    });
   }
 
   if (!options.skipLoad && tabId === 'browse') renderResources();
@@ -1478,8 +1693,8 @@ function restoreNavigationFromHistory() {
     ? parseContextualRoute(routeKey)
     : null;
   if (contextualRoute) {
-    switchTab('browse', { navKey: 'resources', history: 'none', skipLoad: true });
-    renderContextualRoute(contextualRoute, { focus: false, refreshAvailability: true });
+    switchTab('browse', { navKey: 'resources', history: 'none', skipLoad: true, focus: false });
+    renderContextualRoute(contextualRoute, { focus: true, refreshAvailability: true });
     return;
   }
   const route = getRouteForRole(state.currentUser.role, routeKey);
@@ -1488,9 +1703,12 @@ function restoreNavigationFromHistory() {
     : Boolean(STUDENT_ROUTES[routeKey]);
   if (state.currentUser.role === 'STUDENT' && route.navKey === 'resources') {
     state.contextRoute = null;
-    setBrowseContextView('catalogue');
   }
-  switchTab(route.tabId, { navKey: route.navKey, history: validRoute ? 'none' : 'replace' });
+  switchTab(route.tabId, {
+    navKey: route.navKey,
+    history: validRoute ? 'none' : 'replace',
+    showCatalogue: state.currentUser.role === 'STUDENT' && route.navKey === 'resources'
+  });
 }
 
 async function restoreSession() {
@@ -1518,6 +1736,12 @@ async function loadAllData() {
   await Promise.all(loaders);
 }
 
+function isCurrentUserSession(sessionGeneration, userId) {
+  return state.sessionGeneration === sessionGeneration
+    && state.currentUser != null
+    && String(state.currentUser.id) === String(userId);
+}
+
 function initialiseTimeFirstSearchForm() {
   const today = new Date();
   const tomorrow = new Date(today);
@@ -1538,9 +1762,13 @@ function invalidateTimeFirstResultsOnCriteriaChange(event) {
   if (state.timeFirstSelection || state.timeFirstSuccess || !state.timeFirstSearch) return;
   if (!['timeFirstDate', 'timeFirstStart', 'timeFirstDuration', 'timeFirstCategory',
     'timeFirstCapacity', 'timeFirstKeyword'].includes(event.target.id)) return;
+  state.timeFirstRequestSequence += 1;
   state.timeFirstSearch = null;
   state.timeFirstResults = [];
   state.timeFirstSearchError = null;
+  state.timeFirstSearching = false;
+  elements.timeFirstSearchBtn.disabled = false;
+  elements.timeFirstSearchBtn.textContent = 'Search availability';
   renderTimeFirstWorkflow();
 }
 
@@ -1586,6 +1814,9 @@ async function handleTimeFirstSearchSubmit(event) {
     return;
   }
 
+  const requestSequence = ++state.timeFirstRequestSequence;
+  const sessionGeneration = state.sessionGeneration;
+  const userId = state.currentUser?.id;
   state.timeFirstSearch = criteria;
   state.timeFirstResults = [];
   state.timeFirstSearchError = null;
@@ -1600,14 +1831,24 @@ async function handleTimeFirstSearchSubmit(event) {
     const response = await api.searchAvailability(
       criteria.startTime, criteria.endTime, criteria.type, criteria.minCapacity, criteria.keyword
     );
+    if (requestSequence !== state.timeFirstRequestSequence
+        || !isCurrentUserSession(sessionGeneration, userId)) return;
     state.timeFirstResults = response.results || [];
   } catch (error) {
-    state.timeFirstSearchError = error.message || 'Availability search failed. Please try again.';
+    if (requestSequence !== state.timeFirstRequestSequence
+        || !isCurrentUserSession(sessionGeneration, userId)) return;
+    state.timeFirstSearchError = getStudentErrorMessage(error, 'We could not search availability. Try again.');
   } finally {
-    state.timeFirstSearching = false;
-    elements.timeFirstSearchBtn.disabled = false;
-    elements.timeFirstSearchBtn.textContent = 'Search availability';
-    renderTimeFirstWorkflow();
+    if (requestSequence === state.timeFirstRequestSequence
+        && isCurrentUserSession(sessionGeneration, userId)) {
+      state.timeFirstSearching = false;
+      elements.timeFirstSearchBtn.disabled = false;
+      elements.timeFirstSearchBtn.textContent = 'Search availability';
+      renderTimeFirstWorkflow();
+      if (state.activeTab === 'find-availability') {
+        document.getElementById('timeFirstResultsTitle').focus();
+      }
+    }
   }
 }
 
@@ -1739,6 +1980,8 @@ function selectTimeFirstResult(result) {
   state.timeFirstConflict = false;
   state.selectedGroupMembers = [];
   renderTimeFirstGroupMembers();
+  elements.timeFirstReviewSection.hidden = false;
+  document.getElementById('timeFirstReviewTitle').focus();
   renderTimeFirstWorkflow();
   elements.timeFirstReviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1827,6 +2070,9 @@ async function submitTimeFirstBooking() {
   const isKit = result.targetType === 'KIT';
   const memberUserIds = state.selectedGroupMembers.filter((member) => member.id !== undefined).map((member) => member.id);
   const memberUsernames = state.selectedGroupMembers.filter((member) => member.username !== undefined).map((member) => member.username);
+  const requestSequence = ++state.timeFirstRequestSequence;
+  const sessionGeneration = state.sessionGeneration;
+  const userId = state.currentUser?.id;
   const payload = {
     userId: state.currentUser.id,
     startTime,
@@ -1841,6 +2087,8 @@ async function submitTimeFirstBooking() {
     const created = isKit
       ? await api.bookKit(result.id, payload)
       : await api.createBooking({ ...payload, resourceId: result.id });
+    if (requestSequence !== state.timeFirstRequestSequence
+        || !isCurrentUserSession(sessionGeneration, userId)) return;
     state.timeFirstSuccess = {
       isKit,
       name: isKit ? (created.kitName || result.name) : result.name,
@@ -1850,18 +2098,25 @@ async function submitTimeFirstBooking() {
     state.timeFirstSelection = null;
     state.timeFirstConflict = false;
     state.selectedGroupMembers = [];
+    elements.timeFirstSuccessSection.hidden = false;
+    document.getElementById('timeFirstSuccessTitle').focus();
     renderTimeFirstWorkflow();
     await loadUserData();
   } catch (error) {
+    if (requestSequence !== state.timeFirstRequestSequence
+        || !isCurrentUserSession(sessionGeneration, userId)) return;
     if (error.status === 409) {
       state.timeFirstConflict = true;
       renderTimeFirstWorkflow();
       return;
     }
-    showToast('Booking request failed', error.message || 'Please check your details and try again.', 'error', 5000);
+    showToast('Booking request failed', getStudentErrorMessage(error, 'We could not send this booking request. Check the details and try again.'), 'error', 5000);
   } finally {
-    state.timeFirstSubmitting = false;
-    if (state.timeFirstSelection) renderTimeFirstReview();
+    if (requestSequence === state.timeFirstRequestSequence
+        && isCurrentUserSession(sessionGeneration, userId)) {
+      state.timeFirstSubmitting = false;
+      if (state.timeFirstSelection) renderTimeFirstReview();
+    }
   }
 }
 
@@ -1872,16 +2127,37 @@ function renderTimeFirstSuccess() {
   elements.timeFirstSuccessTime.textContent = formatTimeFirstInterval(success.startTime, success.endTime);
 }
 
-function resetTimeFirstWorkflow() {
+function resetTimeFirstWorkflow(options = {}) {
+  state.timeFirstRequestSequence += 1;
   state.timeFirstSearch = null;
   state.timeFirstResults = [];
   state.timeFirstSearchError = null;
+  state.timeFirstSearching = false;
   state.timeFirstSelection = null;
   state.timeFirstSuccess = null;
   state.timeFirstConflict = false;
+  state.timeFirstSubmitting = false;
   state.selectedGroupMembers = [];
+  elements.timeFirstGroupMemberInput.value = '';
+  elements.timeFirstResultsGrid.innerHTML = '';
+  elements.timeFirstReviewDetails.innerHTML = '';
+  elements.timeFirstInterval.textContent = '';
+  elements.timeFirstSuccessResource.textContent = '';
+  elements.timeFirstSuccessTime.textContent = '';
+  elements.timeFirstConflictNotice.hidden = true;
+  if (options.resetCriteria) {
+    elements.timeFirstSearchForm.reset();
+    initialiseTimeFirstSearchForm();
+    setTimeFirstNotice('');
+  }
+  elements.timeFirstWhenSection.hidden = false;
+  if (options.focus !== false) elements.timeFirstDate.focus();
+  elements.timeFirstSearchBtn.disabled = false;
+  elements.timeFirstSearchBtn.textContent = 'Search availability';
+  elements.timeFirstSubmitBtn.disabled = false;
+  elements.timeFirstSubmitBtn.textContent = 'Send booking request';
+  renderTimeFirstGroupMembers();
   renderTimeFirstWorkflow();
-  elements.timeFirstDate.focus();
 }
 
 async function loadResources() {
@@ -1921,7 +2197,11 @@ async function loadKits() {
 
 
 async function loadUserData() {
+  if (!state.currentUser) return;
+  const userId = state.currentUser.id;
+  const sessionGeneration = state.sessionGeneration;
   state.userDataLoaded = false;
+  state.homeReservationError = false;
   if (elements.studentSnapshotGrid && state.currentUser.role !== 'ADMIN') {
     elements.studentSnapshotGrid.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading your overview…</span></div>';
   }
@@ -1934,24 +2214,27 @@ async function loadUserData() {
   const waitlistPromise = loadMyWaitlists();
 
   const [upcomingResult, historyResult, kitUpcomingResult, kitHistoryResult] = await Promise.all([
-    api.getUserBookings(state.currentUser.id)
+    api.getUserBookings(userId)
       .then((data) => ({ ok: true, data }))
       .catch((error) => ({ ok: false, error })),
-    api.getUserBookingHistory(state.currentUser.id)
+    api.getUserBookingHistory(userId)
       .then((data) => ({ ok: true, data }))
       .catch((error) => ({ ok: false, error })),
-    api.getUserKitBookings(state.currentUser.id)
+    api.getUserKitBookings(userId)
       .then((data) => ({ ok: true, data }))
       .catch((error) => ({ ok: false, error })),
-    api.getUserKitBookingHistory(state.currentUser.id)
+    api.getUserKitBookingHistory(userId)
       .then((data) => ({ ok: true, data }))
       .catch((error) => ({ ok: false, error }))
   ]);
+
+  if (!isCurrentUserSession(sessionGeneration, userId)) return;
 
   if (upcomingResult.ok) state.userBookings = upcomingResult.data;
   if (historyResult.ok) state.userBookingHistory = historyResult.data;
   if (kitUpcomingResult.ok) state.userKitBookings = kitUpcomingResult.data;
   if (kitHistoryResult.ok) state.userKitBookingHistory = kitHistoryResult.data;
+  state.homeReservationError = !upcomingResult.ok || !kitUpcomingResult.ok;
   const activeBookingResult = state.bookingView === 'HISTORY' ? historyResult : upcomingResult;
   const activeKitResult = state.bookingView === 'HISTORY' ? kitHistoryResult : kitUpcomingResult;
   if (activeBookingResult.ok) {
@@ -1961,17 +2244,18 @@ async function loadUserData() {
     renderErrorState(
       elements.myBookingsList,
       'We could not load your reservations.',
-      err.message,
+      getStudentErrorMessage(err, 'Try again to reload your bookings.'),
       () => loadUserData()
     );
   }
 
   if (!activeKitResult.ok) {
     console.error('Error loading Project Kit reservations:', activeKitResult.error);
-    showToast('Project Kit Notice', activeKitResult.error.message || 'Project Kit reservations could not be loaded.', 'warning');
+    showToast('Project Kit notice', getStudentErrorMessage(activeKitResult.error, 'Project Kit reservations could not be loaded.'), 'warning');
   }
 
   await waitlistPromise;
+  if (!isCurrentUserSession(sessionGeneration, userId)) return;
   state.userDataLoaded = true;
   renderStudentSnapshot();
   renderStudentHomeDashboard();
@@ -1979,17 +2263,29 @@ async function loadUserData() {
 }
 
 async function loadMyWaitlists() {
+  const userId = state.currentUser?.id;
+  if (userId == null) return false;
+  const sessionGeneration = state.sessionGeneration;
+  const requestSequence = ++state.waitlistRequestSequence;
+  const isCurrentRequest = () => requestSequence === state.waitlistRequestSequence
+    && isCurrentUserSession(sessionGeneration, userId);
   elements.myWaitlistList.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading your waitlist activity...</p></div>';
   try {
-    state.userWaitlists = await api.getMyWaitlist();
+    const waitlists = await api.getMyWaitlist();
+    if (!isCurrentRequest()) return false;
+    state.userWaitlists = waitlists;
+    state.waitlistLoadError = false;
     renderMyWaitlists();
     updateMetrics();
     return true;
   } catch (err) {
+    if (!isCurrentRequest()) return false;
+    state.userWaitlists = [];
+    state.waitlistLoadError = true;
     renderErrorState(
       elements.myWaitlistList,
       'We could not load your waitlist activity.',
-      err.message,
+      getStudentErrorMessage(err, 'Try again to reload your waitlist.'),
       () => loadMyWaitlists(),
       { compact: true }
     );
@@ -2092,17 +2388,21 @@ function renderStudentSnapshot() {
     ? escapeHtml(next.kind === 'KIT' ? (next.data.kitName || 'Project Kit') : next.data.resourceName)
     : 'No upcoming booking';
   const nextMeta = next
-    ? `${formatDateTime(next.data.startTime)} · ${escapeHtml(getStatusLabel(next.data.status))}`
+    ? `${formatDateTime(next.data.startTime)} · ${escapeHtml(getBookingDisplayStatus(next.data))}`
     : 'Browse resources to reserve a time.';
   const approvalMeta = pendingCount === 0
     ? 'Nothing is waiting for a decision.'
     : `${pendingCount} ${pendingCount === 1 ? 'reservation is' : 'reservations are'} awaiting review.`;
-  const waitlistTitle = offeredCount > 0
+  const waitlistTitle = state.waitlistLoadError
+    ? 'Unavailable'
+    : offeredCount > 0
     ? `${offeredCount} slot ${offeredCount === 1 ? 'offer' : 'offers'} ready`
     : waitlistTotal > 0
       ? `${waitingCount} ${waitingCount === 1 ? 'request' : 'requests'} waiting`
       : 'No active waitlists';
-  const waitlistMeta = offeredCount > 0
+  const waitlistMeta = state.waitlistLoadError
+    ? 'We could not load your waitlist activity.'
+    : offeredCount > 0
     ? 'Review the offer before it expires.'
     : waitlistTotal > 0
       ? 'We will show an exact-slot offer here if it opens.'
@@ -2139,6 +2439,18 @@ function renderStudentSnapshot() {
 function renderStudentHomeDashboard() {
   if (!elements.homeUpcomingList || state.currentUser?.role === 'ADMIN' || !state.userDataLoaded) return;
 
+  if (state.homeReservationError) {
+    renderErrorState(
+      elements.homeUpcomingList,
+      'Your reservations are unavailable.',
+      'Try again to reload your upcoming reservations.',
+      () => loadUserData(),
+      { compact: true }
+    );
+    elements.homeWaitlistOffer.hidden = true;
+    return;
+  }
+
   const upcoming = getStudentReservationItems(false)
     .filter((item) => item.kind === 'KIT'
       ? isCurrentDashboardKit(item.data)
@@ -2148,8 +2460,9 @@ function renderStudentHomeDashboard() {
   if (upcoming.length === 0) {
     elements.homeUpcomingList.innerHTML = `
       <div class="home-upcoming-empty">
-        <strong>No upcoming reservations</strong>
+        <strong>No upcoming bookings yet.</strong>
         <span>Your active room, lab, equipment, and Kit reservations will appear here.</span>
+        <button type="button" class="btn btn-secondary btn-sm home-empty-find-btn">Find availability</button>
       </div>`;
   } else {
     elements.homeUpcomingList.innerHTML = upcoming.map((item) => {
@@ -2158,17 +2471,25 @@ function renderStudentHomeDashboard() {
         ? (booking.kitName || 'Project Kit')
         : (booking.resourceName || 'Resource reservation');
       const kindLabel = item.kind === 'KIT' ? 'Project Kit' : 'Reservation';
+      const location = item.kind === 'BOOKING' && booking.resourceLocation
+        ? `<span class="home-reservation-location">${escapeHtml(booking.resourceLocation)}</span>`
+        : '';
       return `
         <article class="home-reservation-row">
           <div class="home-reservation-copy">
             <strong>${escapeHtml(name)}</strong>
             <span>${escapeHtml(formatTimeFirstInterval(booking.startTime, booking.endTime))}</span>
+            ${location}
             <span class="status-pill ${escapeHtml(booking.status)}">${escapeHtml(getBookingDisplayStatus(booking))}</span>
           </div>
-          <button class="btn btn-ghost btn-sm home-reservation-view" type="button" aria-label="View ${escapeHtml(kindLabel.toLowerCase())} details">View</button>
+          <button class="btn btn-ghost btn-sm home-reservation-view" type="button" aria-label="Open ${escapeHtml(kindLabel.toLowerCase())} in My bookings">View</button>
         </article>`;
     }).join('');
   }
+
+  elements.homeUpcomingList.querySelector('.home-empty-find-btn')?.addEventListener('click', () =>
+    switchTab('find-availability', { navKey: 'find-availability' })
+  );
 
   const activeOffer = state.userWaitlists
     .filter((item) => item.status === 'OFFERED')
@@ -2177,10 +2498,14 @@ function renderStudentHomeDashboard() {
   elements.homeWaitlistOffer.hidden = !activeOffer;
   if (activeOffer) {
     elements.homeWaitlistOfferTitle.textContent = activeOffer.resourceName || 'Waitlist offer';
-    elements.homeWaitlistOfferTime.textContent = formatTimeFirstInterval(
+    const slot = formatTimeFirstInterval(
       activeOffer.requestedStart,
       activeOffer.requestedEnd
     );
+    const expiry = activeOffer.offerExpiresAt
+      ? ` · Offer expires at ${formatDateTime(activeOffer.offerExpiresAt)}`
+      : '';
+    elements.homeWaitlistOfferTime.textContent = `${slot}${expiry}`;
   }
 }
 
@@ -2419,7 +2744,6 @@ function renderContextualRoute(route, options = {}) {
       return;
     }
     state.contextRoute = route;
-    setBrowseContextView('detail');
     elements.resourceDetailContent.innerHTML = `
       <div class="empty-state context-not-found" role="status">
         <h1 class="page-title" id="resourceDetailPageHeading" tabindex="-1">Item not found</h1>
@@ -2427,24 +2751,22 @@ function renderContextualRoute(route, options = {}) {
       </div>
     `;
     elements.mobileWorkspaceTitle.textContent = 'Resource details';
-    if (options.focus !== false) elements.resourceDetailContent.querySelector('h1')?.focus();
+    setBrowseContextView('detail', { focus: options.focus !== false });
     return;
   }
 
   state.contextRoute = route;
   if (route.page === 'detail') {
-    setBrowseContextView('detail');
     elements.mobileWorkspaceTitle.textContent = route.entityType === 'kit' ? 'Project Kit details' : 'Resource details';
     if (route.entityType === 'kit') renderKitDetailPage(item);
     else renderResourceDetailPage(item);
-    if (options.focus !== false) elements.resourceDetailContent.querySelector('h1')?.focus();
+    setBrowseContextView('detail', { focus: options.focus !== false });
     return;
   }
 
-  setBrowseContextView('availability');
   prepareAvailabilityTarget(route, item, options.forceReset);
+  setBrowseContextView('availability', { focus: options.focus !== false });
   if (options.refreshAvailability) loadAvailability();
-  if (options.focus !== false) elements.modalBookingTitle.focus();
 }
 
 function renderResourceDetailPage(resource) {
@@ -2475,6 +2797,7 @@ function renderResourceDetailPage(resource) {
           <div class="resource-detail-actions">
             <button class="btn btn-primary" type="button" id="resourceDetailAvailabilityBtn">Check availability</button>
             <button class="btn btn-secondary resource-detail-report-btn" type="button" id="resourceDetailReportIssueBtn">Report issue</button>
+            <button class="btn btn-ghost" type="button" id="resourceDetailMyIssuesBtn">My reported issues</button>
           </div>
         </div>
       </header>
@@ -2494,6 +2817,9 @@ function renderResourceDetailPage(resource) {
   );
   elements.resourceDetailContent.querySelector('#resourceDetailReportIssueBtn')?.addEventListener('click', () =>
     openIssueModal(resource)
+  );
+  elements.resourceDetailContent.querySelector('#resourceDetailMyIssuesBtn')?.addEventListener('click', () =>
+    openIssueHistory(resource)
   );
 }
 
@@ -2558,6 +2884,11 @@ function renderMyBookings() {
   const container = elements.myBookingsList;
   container.innerHTML = '';
   const isHistory = state.bookingView === 'HISTORY';
+  elements.bookingViewTabs.querySelectorAll('.booking-view-tab').forEach((button) => {
+    const selected = button.dataset.bookingView === state.bookingView;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', selected ? 'true' : 'false');
+  });
   const visibleItems = getStudentReservationItems(isHistory);
   const upcomingCount = state.userBookings.length + state.userKitBookings.length;
   const historyCount = state.userBookingHistory.length + state.userKitBookingHistory.length;
@@ -2572,13 +2903,20 @@ function renderMyBookings() {
     ? 'Completed, cancelled, rejected, and expired reservations are kept here for reference.'
     : 'Bookings that still need approval or are confirmed for a future time.';
 
+  renderMyBookingsSuccess();
+
   if (visibleItems.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <p style="font-weight: 600;">${isHistory ? 'You have no booking history yet.' : 'You have no upcoming reservations.'}</p>
-        <p style="font-size: 0.85rem; margin-top: 0.25rem;">${isHistory ? 'Closed reservations will appear here.' : 'Browse available resources to make a booking.'}</p>
+        <div class="state-icon" aria-hidden="true">${isHistory ? '✓' : '▦'}</div>
+        <p class="state-title">${isHistory ? 'No booking history yet.' : 'No upcoming bookings.'}</p>
+        <p>${isHistory ? 'Completed, cancelled, and rejected reservations will appear here.' : 'Find a resource and choose an available time to get started.'}</p>
+        ${isHistory ? '' : '<button class="btn btn-primary btn-sm empty-bookings-find-btn" type="button">Find availability</button>'}
       </div>
     `;
+    container.querySelector('.empty-bookings-find-btn')?.addEventListener('click', () =>
+      switchTab('find-availability', { navKey: 'find-availability' })
+    );
     return;
   }
 
@@ -2589,6 +2927,17 @@ function renderMyBookings() {
       container.appendChild(renderStandardBookingCard(item.data, isHistory));
     }
   });
+}
+
+function renderMyBookingsSuccess() {
+  if (!elements.myBookingsSuccess) return;
+  const notice = state.myBookingsSuccess;
+  elements.myBookingsSuccess.hidden = !notice;
+  if (!notice) return;
+  elements.myBookingsSuccessTitle.textContent = notice.title;
+  elements.myBookingsSuccessMessage.textContent = notice.message;
+  elements.myBookingsSuccessDetail.textContent = notice.detail || '';
+  elements.myBookingsSuccessViewBtn.textContent = notice.actionLabel || 'Review booking';
 }
 
 function renderKitBookingCard(kitBooking, isHistory) {
@@ -2698,14 +3047,18 @@ function renderStandardBookingCard(booking, isHistory) {
     EQUIPMENT: '📽️'
   };
 
+  const isOwner = Number(booking.userId) === Number(state.currentUser.id);
   const canCancel = !isHistory
+    && isOwner
     && ['PENDING', 'CONFIRMED', 'APPROVED'].includes(booking.status)
     && new Date(booking.startTime).getTime() > Date.now();
 
   const duration = formatDuration(booking.startTime, booking.endTime);
-  const isOwner = booking.userId === state.currentUser.id;
   const isGroup = booking.groupBooking || (booking.groupMemberNames && booking.groupMemberNames.length > 0);
   const displayStatus = getBookingDisplayStatus(booking, isHistory);
+  const locationHtml = booking.resourceLocation
+    ? `<div class="booking-location-line"><span aria-hidden="true">⌖</span><span><strong>Location:</strong> ${escapeHtml(booking.resourceLocation)}</span></div>`
+    : '';
 
   let groupBadgeHtml = '';
   let coMembersHtml = '';
@@ -2754,14 +3107,15 @@ function renderStandardBookingCard(booking, isHistory) {
             <span>•</span>
             <span>⏳ ${duration}</span>
           </div>
+          ${locationHtml}
           ${coMembersHtml}
         </div>
       </div>
 
       <div class="booking-actions-group">
-        <span class="status-pill ${booking.status}">${escapeHtml(displayStatus)}</span>
+        <span class="status-pill ${escapeHtml(booking.status)}">${escapeHtml(displayStatus)}</span>
         ${
-          !isHistory && (booking.status === 'APPROVED' || booking.status === 'CONFIRMED')
+          ['APPROVED', 'CONFIRMED', 'COMPLETED'].includes(booking.status)
             ? `<button class="btn btn-secondary btn-sm receipt-download-btn" data-id="${booking.bookingId}">
                  <span>📄 Download Receipt</span>
                </button>`
@@ -2779,7 +3133,7 @@ function renderStandardBookingCard(booking, isHistory) {
 
     const cancelBtn = card.querySelector('.cancel-booking-btn');
     if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => handleCancelBooking(booking.bookingId, booking.resourceName));
+      cancelBtn.addEventListener('click', () => handleCancelBooking(booking));
     }
 
     const receiptBtn = card.querySelector('.receipt-download-btn');
@@ -2793,58 +3147,100 @@ function renderMyWaitlists() {
   const container = elements.myWaitlistList;
   container.innerHTML = '';
 
-  elements.waitlistCountBadge.textContent = `${state.userWaitlists.length} active`;
+  const activeEntries = state.userWaitlists.filter((item) =>
+    ['WAITING', 'OFFERED'].includes(item.status));
+  const historyEntries = state.userWaitlists.filter((item) =>
+    !['WAITING', 'OFFERED'].includes(item.status));
+  elements.waitlistCountBadge.textContent = `${activeEntries.length} active`;
 
   if (state.userWaitlists.length === 0) {
     container.innerHTML = `
-      <div class="empty-state" style="padding: 1.5rem 1rem;">
+      <div class="empty-state waitlist-empty-state">
         <div class="state-icon" aria-hidden="true">↔️</div>
-        <p class="state-title">No active waitlists</p>
+        <p class="state-title">You are not waiting for any resource slots.</p>
         <p>Join an exact time from a resource schedule when a slot is busy.</p>
+        <button type="button" class="btn btn-primary btn-sm waitlist-browse-btn">Browse resources</button>
       </div>
     `;
+    container.querySelector('.waitlist-browse-btn')?.addEventListener('click', () =>
+      switchTab('browse', { navKey: 'resources' })
+    );
     return;
   }
 
-  state.userWaitlists.forEach((item) => {
-    const card = document.createElement('div');
-    const offered = item.status === 'OFFERED';
-    card.className = `waitlist-card${offered ? ' offer-card' : ''}`;
-    const queueDetail = offered
-      ? `Respond by ${formatDateTime(item.offerExpiresAt)}`
-      : `Queue position #${item.queuePosition}`;
-    const actions = offered
-      ? `<div class="waitlist-actions">
-           <button type="button" class="btn btn-primary btn-sm accept-slot-btn">Accept Slot</button>
+  const appendSection = (title, entries, active) => {
+    if (!entries.length) return;
+    const section = document.createElement('section');
+    section.className = `waitlist-state-section${active ? ' waitlist-active-section' : ' waitlist-history-section'}`;
+    section.innerHTML = `<h3>${title}</h3><div class="waitlist-section-list"></div>`;
+    const list = section.querySelector('.waitlist-section-list');
+    entries.forEach((item) => list.appendChild(createWaitlistCard(item, active)));
+    container.appendChild(section);
+  };
+
+  appendSection('Active', activeEntries, true);
+  appendSection('History', historyEntries, false);
+}
+
+function createWaitlistCard(item, active) {
+  const card = document.createElement('article');
+  const offered = item.status === 'OFFERED';
+  const waiting = item.status === 'WAITING';
+  card.className = `waitlist-card${offered ? ' offer-card' : ''}${active ? '' : ' history-card'}`;
+
+  const position = waiting && item.queuePosition != null
+    ? `<span>Position ${escapeHtml(item.queuePosition)} in queue</span>`
+    : '';
+  const expiry = offered && item.offerExpiresAt
+    ? `<span>Offer expires at ${escapeHtml(formatDateTime(item.offerExpiresAt))}</span>`
+    : '';
+  const actions = offered
+    ? `<div class="waitlist-actions">
+         <p class="waitlist-offer-note">Accepting creates a normal booking request. Admin approval is still required.</p>
+         <div class="waitlist-offer-buttons">
+           <button type="button" class="btn btn-primary btn-sm accept-slot-btn">Accept slot</button>
            <button type="button" class="btn btn-secondary btn-sm decline-slot-btn">Decline</button>
-         </div>`
-      : `<button type="button" class="btn btn-ghost btn-sm leave-waitlist-btn">Leave waitlist</button>`;
+         </div>
+       </div>`
+    : waiting
+      ? '<button type="button" class="btn btn-danger btn-sm leave-waitlist-btn">Leave waitlist</button>'
+      : '';
 
-    card.innerHTML = `
-      <div class="waitlist-card-copy">
-        <span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(getStatusLabel(item.status))}</span>
-        <span class="waitlist-resource-name">${escapeHtml(item.resourceName)}</span>
-        <span>${formatDateTime(item.requestedStart)} → ${formatDateTime(item.requestedEnd)}</span>
-        <span>${escapeHtml(queueDetail)}</span>
-      </div>
-      ${actions}
-    `;
+  card.innerHTML = `
+    <div class="waitlist-card-copy">
+      <span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(getWaitlistStatusLabel(item.status))}</span>
+      <strong class="waitlist-resource-name">${escapeHtml(item.resourceName)}</strong>
+      <span>${escapeHtml(formatTimeFirstInterval(item.requestedStart, item.requestedEnd))}</span>
+      ${position}${expiry}
+    </div>
+    ${actions}
+  `;
 
-    card.querySelector('.accept-slot-btn')?.addEventListener('click', () => handleAcceptSlot(item));
-    card.querySelector('.decline-slot-btn')?.addEventListener('click', () => handleDeclineSlot(item));
-    card.querySelector('.leave-waitlist-btn')?.addEventListener('click', () => handleLeaveWaitlist(item));
-
-    container.appendChild(card);
-  });
+  card.querySelector('.accept-slot-btn')?.addEventListener('click', () => handleAcceptSlot(item));
+  card.querySelector('.decline-slot-btn')?.addEventListener('click', () => handleDeclineSlot(item));
+  card.querySelector('.leave-waitlist-btn')?.addEventListener('click', () => handleLeaveWaitlist(item));
+  return card;
 }
 
 async function handleAcceptSlot(item) {
+  const userId = state.currentUser?.id;
+  const sessionGeneration = state.sessionGeneration;
   try {
-    await api.acceptWaitlistOffer(item.id);
-    showToast('Slot accepted', 'Your booking request is now awaiting approval.', 'success');
+    const booking = await api.acceptWaitlistOffer(item.id);
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    state.bookingView = 'UPCOMING';
+    state.myBookingsSuccess = {
+      title: 'Slot accepted',
+      message: 'A booking request was created for this exact time. Admin approval is still required.',
+      detail: `${booking.resourceName || item.resourceName} · ${formatTimeFirstInterval(booking.startTime, booking.endTime)}`,
+      actionLabel: 'Review upcoming bookings',
+      view: 'UPCOMING'
+    };
     await loadAllData();
+    switchTab('my-bookings', { navKey: 'bookings' });
   } catch (err) {
-    showToast('Unable to accept', err.message, err.status === 409 ? 'warning' : 'error');
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    showToast('Unable to accept', getStudentErrorMessage(err, 'We could not accept this offer. Refresh and try again.'), err.status === 409 ? 'warning' : 'error');
     await loadUserData();
   }
 }
@@ -2859,12 +3255,17 @@ async function handleDeclineSlot(item) {
   });
   if (!confirmed) return;
 
+  const userId = state.currentUser?.id;
+  const sessionGeneration = state.sessionGeneration;
   try {
     await api.declineWaitlistOffer(item.id);
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
     showToast('Offer declined', 'The slot was released to the next eligible student.', 'info');
     await loadAllData();
+    if (state.activeTab === 'waitlist') focusPanelHeading(elements.tabWaitlist, false);
   } catch (err) {
-    showToast('Unable to decline', err.message, err.status === 409 ? 'warning' : 'error');
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    showToast('Unable to decline', getStudentErrorMessage(err, 'We could not decline this offer. Refresh and try again.'), err.status === 409 ? 'warning' : 'error');
     await loadUserData();
   }
 }
@@ -2879,12 +3280,17 @@ async function handleLeaveWaitlist(item) {
   });
   if (!confirmed) return;
 
+  const userId = state.currentUser?.id;
+  const sessionGeneration = state.sessionGeneration;
   try {
     await api.leaveWaitlist(item.id);
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
     showToast('Waitlist left', 'Your request no longer counts in this queue.', 'info');
     await loadAllData();
+    if (state.activeTab === 'waitlist') focusPanelHeading(elements.tabWaitlist, false);
   } catch (err) {
-    showToast('Unable to leave', err.message, err.status === 409 ? 'warning' : 'error');
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    showToast('Unable to leave', getStudentErrorMessage(err, 'We could not leave this waitlist. Refresh and try again.'), err.status === 409 ? 'warning' : 'error');
   }
 }
 
@@ -3040,14 +3446,14 @@ function renderAdminWaitlistOverview() {
 
   state.adminWaitlistOverview.forEach((slot) => {
     const tr = document.createElement('tr');
-    const offerText = slot.activeOffer
-      ? `<span class="status-pill OFFERED">${getStatusLabel('OFFERED')}</span>`
-      : '<span style="color: var(--slate-500); font-weight: 600;">No active offer</span>';
+    const statusText = slot.status === 'OFFERED'
+      ? `<span class="status-pill OFFERED">${getWaitlistStatusLabel('OFFERED')}</span>`
+      : `<span class="status-pill WAITING">${getWaitlistStatusLabel('WAITING')}</span>`;
     tr.innerHTML = `
       <td><strong>${escapeHtml(slot.resourceName)}</strong></td>
       <td>${formatDateTime(slot.requestedStart)} &rarr; ${formatDateTime(slot.requestedEnd)}</td>
-      <td>${slot.waitingCount}</td>
-      <td>${offerText}</td>
+      <td>${statusText}</td>
+      <td>${slot.waitingCount} waiting</td>
       <td>${slot.activeOffer ? formatDateTime(slot.offerExpiresAt) : '—'}</td>`;
     tbody.appendChild(tr);
   });
@@ -3372,7 +3778,7 @@ function renderAdminIssuesTable() {
       <td>${escapeHtml(issue.reporterUsername)} <span style="color: var(--slate-400); font-size: 0.75rem;">(ID: ${issue.reporterUserId})</span></td>
       <td style="max-width: 320px; color: var(--slate-600);">${escapeHtml(issue.description)}</td>
       <td style="font-size: 0.8rem; color: var(--slate-600);">${formatDateTime(issue.reportedTime)}</td>
-      <td><span class="status-pill ${issue.status}">${escapeHtml(getStatusLabel(issue.status))}</span></td>
+      <td><span class="status-pill ${escapeHtml(issue.status)}">${escapeHtml(getIssueStatusLabel(issue.status))}</span></td>
       <td style="text-align: right;">
         ${actionHtml}
       </td>
@@ -3541,7 +3947,7 @@ async function loadAvailability() {
     elements.scheduleState.className = 'schedule-state error-state';
     elements.scheduleState.setAttribute('aria-busy', 'false');
     elements.scheduleState.innerHTML = `
-      <span>Availability could not be loaded. ${escapeHtml(err.message || 'Please try again.')}</span>
+      <span>We could not load availability. ${escapeHtml(getStudentErrorMessage(err, 'Please try again.'))}</span>
       <button type="button" class="btn btn-secondary btn-sm schedule-retry-btn">Try again</button>
     `;
     elements.scheduleState.querySelector('.schedule-retry-btn')?.addEventListener('click', () => loadAvailability());
@@ -3933,6 +4339,8 @@ async function handleBookingSubmit(e) {
 
   const submitBtn = document.getElementById('submitBookingBtn');
   const btnText = submitBtn.querySelector('.btn-text');
+  const sessionGeneration = state.sessionGeneration;
+  const userId = state.currentUser?.id;
 
   try {
     submitBtn.disabled = true;
@@ -3940,7 +4348,7 @@ async function handleBookingSubmit(e) {
 
     if (isKit && kitId) {
       const payload = {
-        userId: state.currentUser.id,
+        userId,
         startTime: startTime,
         endTime: endTime,
         memberUserIds: memberUserIds.length ? memberUserIds : undefined,
@@ -3948,6 +4356,7 @@ async function handleBookingSubmit(e) {
       };
 
       const kitBooking = await api.bookKit(kitId, payload);
+      if (!isCurrentUserSession(sessionGeneration, userId)) return;
       showBookingSuccess({
         isKit: true,
         resourceName: kitBooking.kitName || kitName,
@@ -3956,7 +4365,7 @@ async function handleBookingSubmit(e) {
       });
     } else {
       const payload = {
-        userId: state.currentUser.id,
+        userId,
         resourceId: resourceId,
         startTime: startTime,
         endTime: endTime,
@@ -3965,6 +4374,7 @@ async function handleBookingSubmit(e) {
       };
 
       await api.createBooking(payload);
+      if (!isCurrentUserSession(sessionGeneration, userId)) return;
       showBookingSuccess({
         isKit: false,
         resourceName,
@@ -3975,6 +4385,7 @@ async function handleBookingSubmit(e) {
 
     await loadAllData();
   } catch (err) {
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
     if (err.status === 409) {
       // Smart Conflict Display
       if (!isKit && state.selectedResourceForBooking) {
@@ -3983,11 +4394,11 @@ async function handleBookingSubmit(e) {
       const isBookingConflict = err.message === 'Resource is already booked during this time slot';
       updateWaitlistConflictAction(new Date(startTime), new Date(endTime), isBookingConflict);
       if (elements.conflictBanner.style.display === 'flex') {
-        elements.conflictMessage.textContent = err.message;
+        elements.conflictMessage.textContent = 'This slot is no longer available. Refresh availability and try again.';
       }
-      showToast('Conflict Detected', err.message, 'error', 5500);
+      showToast('Slot unavailable', 'This slot is no longer available. Refresh availability and try again.', 'warning', 5500);
     } else {
-      showToast('Booking Failed', err.message || 'Server error occurred.', 'error');
+      showToast('Booking failed', getStudentErrorMessage(err, 'We could not send this booking request. Try again.'), 'error');
     }
   } finally {
     submitBtn.disabled = false;
@@ -4003,10 +4414,13 @@ async function handleJoinWaitlistFromConflict() {
   const startTime = elements.bookingStartTime.value;
   const endTime = elements.bookingEndTime.value;
   if (!startTime || !endTime) return;
+  const sessionGeneration = state.sessionGeneration;
+  const userId = state.currentUser?.id;
 
   try {
     const resource = state.selectedResourceForBooking;
     const joined = await api.joinWaitlist(resource.id, startTime, endTime);
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
     state.userWaitlists = [
       joined,
       ...state.userWaitlists.filter((entry) => entry.id !== joined.id)
@@ -4023,12 +4437,15 @@ async function handleJoinWaitlistFromConflict() {
 
     await loadMyWaitlists();
   } catch (err) {
-    showToast('Waitlist Notice', err.message, err.status === 409 ? 'warning' : 'error');
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    showToast('Waitlist notice', getStudentErrorMessage(err, 'We could not join this waitlist. Refresh availability and try again.'), err.status === 409 ? 'warning' : 'error');
   }
 }
 
 // Cancel Booking Flow
-async function handleCancelBooking(bookingId, resourceName) {
+async function handleCancelBooking(booking) {
+  const bookingId = booking.bookingId;
+  const resourceName = booking.resourceName;
   const confirmed = await showConfirmDialog({
     title: 'Cancel this booking?',
     message: `Your reservation for ${resourceName} will be cancelled and the time may be offered to another student.`,
@@ -4037,20 +4454,25 @@ async function handleCancelBooking(bookingId, resourceName) {
     tone: 'danger'
   });
   if (!confirmed) return;
+  const sessionGeneration = state.sessionGeneration;
+  const userId = state.currentUser?.id;
 
   try {
     await api.cancelBooking(bookingId);
-
-    showToast(
-      'Booking Cancelled',
-      `Booking #${bookingId} was cancelled. Any matching student will receive a temporary slot offer.`,
-      'info',
-      6000
-    );
-
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    state.bookingView = 'HISTORY';
+    state.myBookingsSuccess = {
+      title: 'Booking cancelled',
+      message: `${resourceName} was cancelled. The time may now be offered to another student.`,
+      detail: formatTimeFirstInterval(booking.startTime, booking.endTime),
+      actionLabel: 'Review booking history',
+      view: 'HISTORY'
+    };
     await loadAllData();
+    if (state.activeTab === 'my-bookings') focusPanelHeading(elements.tabMyBookings, false);
   } catch (err) {
-    showToast('Cancellation Error', err.message, 'error');
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    showToast('Cancellation error', getStudentErrorMessage(err, 'We could not cancel this booking. Refresh and try again.'), err.status === 409 ? 'warning' : 'error');
   }
 }
 
@@ -4065,18 +4487,25 @@ async function handleCancelKitBooking(kitBooking) {
     tone: 'danger'
   });
   if (!confirmed) return;
+  const sessionGeneration = state.sessionGeneration;
+  const userId = state.currentUser?.id;
 
   try {
     await api.cancelKitBooking(kitBooking.id);
-    showToast(
-      'Kit Cancelled',
-      `${reference} was cancelled and all included resources were released.`,
-      'info',
-      6000
-    );
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    state.bookingView = 'HISTORY';
+    state.myBookingsSuccess = {
+      title: 'Project Kit reservation cancelled',
+      message: `${kitName} was cancelled as one parent reservation. Its included resources were released.`,
+      detail: `${reference} · ${formatTimeFirstInterval(kitBooking.startTime, kitBooking.endTime)}`,
+      actionLabel: 'Review booking history',
+      view: 'HISTORY'
+    };
     await loadAllData();
+    if (state.activeTab === 'my-bookings') focusPanelHeading(elements.tabMyBookings, false);
   } catch (err) {
-    showToast('Kit Cancellation Error', err.message, err.status === 409 ? 'warning' : 'error');
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    showToast('Kit cancellation error', getStudentErrorMessage(err, 'We could not cancel this Project Kit reservation. Refresh and try again.'), err.status === 409 ? 'warning' : 'error');
   }
 }
 
@@ -4093,7 +4522,7 @@ async function handleReceiptDownload(bookingId) {
     URL.revokeObjectURL(url);
     showToast('Receipt Downloaded', `PDF receipt for booking #${bookingId} is ready.`, 'success');
   } catch (err) {
-    showToast('Receipt Error', err.message, 'error');
+    showToast('Receipt Error', getStudentErrorMessage(err, 'We could not download this receipt. Refresh and try again.'), 'error');
   }
 }
 
@@ -4111,7 +4540,7 @@ async function handleKitReceiptDownload(kitBooking) {
     URL.revokeObjectURL(url);
     showToast('Kit Receipt Downloaded', `PDF receipt for ${reference} is ready.`, 'success');
   } catch (err) {
-    showToast('Kit Receipt Error', err.message, err.status === 403 ? 'warning' : 'error');
+    showToast('Kit Receipt Error', getStudentErrorMessage(err, 'We could not download this Project Kit receipt. Refresh and try again.'), err.status === 403 || err.status === 409 ? 'warning' : 'error');
   }
 }
 
@@ -4120,39 +4549,140 @@ function openIssueModal(resource) {
   elements.issueResourceId.value = resource.id;
   elements.modalIssueResourceName.textContent = `${resource.name} · ${getResourceTypeLabel(resource.type)}`;
   elements.issueDescription.value = '';
+  setIssueDescriptionError('');
+  updateIssueDescriptionCount();
+  showIssueModalView('FORM');
   openManagedModal(elements.issueModalBackdrop, elements.issueDescription, closeIssueModal);
+}
+
+function openIssueHistory(resource) {
+  state.selectedResourceForIssue = resource;
+  elements.issueResourceId.value = resource.id;
+  elements.modalIssueResourceName.textContent = `${resource.name} · ${getResourceTypeLabel(resource.type)}`;
+  showIssueModalView('HISTORY');
+  openManagedModal(elements.issueModalBackdrop, elements.issueHistoryTitle, closeIssueModal);
+  loadMyIssues();
+}
+
+function showIssueModalView(view) {
+  state.issueModalView = view;
+  elements.issueForm.hidden = view !== 'FORM';
+  elements.issueSuccessState.hidden = view !== 'SUCCESS';
+  elements.issueHistoryState.hidden = view !== 'HISTORY';
+  elements.issueFormTitle.textContent = view === 'HISTORY'
+    ? 'My reported issues'
+    : view === 'SUCCESS' ? 'Issue reported' : 'Report resource issue';
+}
+
+function setIssueDescriptionError(message) {
+  elements.issueDescriptionError.textContent = message;
+  elements.issueDescriptionError.hidden = !message;
+  elements.issueDescription.setAttribute('aria-invalid', message ? 'true' : 'false');
+}
+
+function updateIssueDescriptionCount() {
+  elements.issueDescriptionCount.textContent = `${elements.issueDescription.value.length} / 500`;
+}
+
+function renderIssueHistory() {
+  const container = elements.issueHistoryList;
+  if (state.userIssues.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state issue-history-empty">
+        <p class="state-title">You haven't reported any issues.</p>
+        <p>Reports you submit for campus resources will appear here.</p>
+        <button type="button" class="btn btn-primary btn-sm issue-history-empty-report-btn">Report an issue</button>
+      </div>`;
+    container.querySelector('.issue-history-empty-report-btn')?.addEventListener('click', () => {
+      showIssueModalView('FORM');
+      requestAnimationFrame(() => elements.issueDescription.focus());
+    });
+    return;
+  }
+
+  container.innerHTML = state.userIssues.map((issue) => `
+    <article class="issue-history-card">
+      <div class="issue-history-card-heading">
+        <div>
+          <strong>${escapeHtml(issue.resourceName || 'Campus resource')}</strong>
+          <span>${escapeHtml(issue.resourceType ? getResourceTypeLabel(issue.resourceType) : 'Resource')}</span>
+        </div>
+        <span class="status-pill ${escapeHtml(issue.status)}">${escapeHtml(getIssueStatusLabel(issue.status))}</span>
+      </div>
+      <p>${escapeHtml(issue.description)}</p>
+      <span class="issue-history-date">Reported ${escapeHtml(issue.reportedTime ? formatDateTime(issue.reportedTime) : 'date unavailable')}</span>
+    </article>
+  `).join('');
+}
+
+async function loadMyIssues() {
+  const userId = state.currentUser?.id;
+  if (userId == null) return false;
+  const sessionGeneration = state.sessionGeneration;
+  elements.issueHistoryList.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading your reports…</span></div>';
+  try {
+    const issues = await api.getMyIssues();
+    if (!isCurrentUserSession(sessionGeneration, userId)) return false;
+    state.userIssues = issues;
+    renderIssueHistory();
+    return true;
+  } catch (error) {
+    if (!isCurrentUserSession(sessionGeneration, userId)) return false;
+    renderErrorState(
+      elements.issueHistoryList,
+      'We could not load your reports.',
+      getStudentErrorMessage(error, 'Try again to reload your issue reports.'),
+      () => loadMyIssues(),
+      { compact: true }
+    );
+    return false;
+  }
 }
 
 function closeIssueModal() {
   closeManagedModal(elements.issueModalBackdrop);
   state.selectedResourceForIssue = null;
+  state.issueModalView = 'FORM';
 }
 
 async function handleIssueSubmit(e) {
   e.preventDefault();
   const description = elements.issueDescription.value.trim();
   if (!description) {
-    showToast('Validation Error', 'Please enter a short issue description.', 'warning');
+    setIssueDescriptionError('Enter a short description of the issue.');
+    elements.issueDescription.focus();
     return;
   }
+  if (description.length > 500) {
+    setIssueDescriptionError('Keep the description to 500 characters or fewer.');
+    elements.issueDescription.focus();
+    return;
+  }
+  setIssueDescriptionError('');
 
   const resource = state.selectedResourceForIssue;
   if (!resource) return;
+  const userId = state.currentUser?.id;
+  const sessionGeneration = state.sessionGeneration;
 
   try {
     elements.submitIssueBtn.disabled = true;
-    await api.reportIssue({
+    const reportedIssue = await api.reportIssue({
       resourceId: resource.id,
-      reporterUserId: state.currentUser.id,
+      reporterUserId: userId,
       description
     });
-    closeIssueModal();
-    showToast('Issue Reported', `${resource.name} is waiting for administrator review.`, 'success');
-    await loadAllData();
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    state.userIssues = [reportedIssue, ...state.userIssues.filter((issue) =>
+      issue.issueId !== reportedIssue.issueId)];
+    elements.issueSuccessResource.textContent = `${resource.name} · Reported ${reportedIssue.reportedTime ? formatDateTime(reportedIssue.reportedTime) : 'just now'}`;
+    showIssueModalView('SUCCESS');
+    requestAnimationFrame(() => elements.issueSuccessBackBtn.focus());
   } catch (err) {
-    showToast('Report Failed', err.message, 'error');
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    showToast('Report failed', getStudentErrorMessage(err, 'We could not submit this issue report. Try again.'), err.status === 409 ? 'warning' : 'error');
   } finally {
-    elements.submitIssueBtn.disabled = false;
+    if (isCurrentUserSession(sessionGeneration, userId)) elements.submitIssueBtn.disabled = false;
   }
 }
 
@@ -4344,7 +4874,7 @@ async function handleAddResourceSubmit(e) {
 async function handleToggleResourceStatus(resourceId, newStatus) {
   try {
     await api.patchResourceStatus(resourceId, newStatus);
-    showToast('Resource status updated', `Resource #${resourceId} is now ${getStatusLabel(newStatus).toLowerCase()}.`, 'info');
+    showToast('Resource status updated', `Resource #${resourceId} is now ${getResourceStatusLabel(newStatus).toLowerCase()}.`, 'info');
     await loadResources();
     await loadAdminData();
   } catch (err) {
@@ -4489,12 +5019,19 @@ function setupEventListeners() {
     const tab = e.target.closest('.booking-view-tab');
     if (!tab) return;
     state.bookingView = tab.dataset.bookingView;
-    document.querySelectorAll('.booking-view-tab').forEach((button) => {
-      const selected = button === tab;
-      button.classList.toggle('active', selected);
-      button.setAttribute('aria-selected', selected ? 'true' : 'false');
-    });
     renderMyBookings();
+  });
+
+  elements.myBookingsSuccessViewBtn?.addEventListener('click', () => {
+    if (state.myBookingsSuccess?.view) {
+      state.bookingView = state.myBookingsSuccess.view;
+      renderMyBookings();
+    }
+    elements.myBookingsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  elements.myBookingsSuccessDismissBtn?.addEventListener('click', () => {
+    state.myBookingsSuccess = null;
+    renderMyBookingsSuccess();
   });
 
   // Resource-first contextual detail and availability pages.
@@ -4505,6 +5042,7 @@ function setupEventListeners() {
   elements.cancelBookingModalBtn.addEventListener('click', closeBookingModal);
   elements.closeBookingSuccessBtn.addEventListener('click', closeBookingModal);
   elements.viewBookingsFromSuccessBtn.addEventListener('click', () => {
+    state.bookingView = 'UPCOMING';
     switchTab('my-bookings', { navKey: 'bookings' });
   });
 
@@ -4523,6 +5061,8 @@ function setupEventListeners() {
   elements.timeFirstCategory.addEventListener('change', updateTimeFirstCapacityVisibility);
   elements.timeFirstRefreshBtn.addEventListener('click', () => elements.timeFirstSearchForm.requestSubmit());
   elements.timeFirstBackBtn.addEventListener('click', () => {
+    elements.timeFirstResultsSection.hidden = false;
+    document.getElementById('timeFirstResultsTitle').focus();
     state.timeFirstSelection = null;
     state.timeFirstConflict = false;
     renderTimeFirstWorkflow();
@@ -4536,9 +5076,10 @@ function setupEventListeners() {
     }
   });
   elements.timeFirstSubmitBtn.addEventListener('click', submitTimeFirstBooking);
-  elements.timeFirstViewBookingsBtn.addEventListener('click', () =>
-    switchTab('my-bookings', { navKey: 'bookings' })
-  );
+  elements.timeFirstViewBookingsBtn.addEventListener('click', () => {
+    state.bookingView = 'UPCOMING';
+    switchTab('my-bookings', { navKey: 'bookings' });
+  });
   elements.timeFirstAnotherBtn.addEventListener('click', resetTimeFirstWorkflow);
   elements.clearSlotSelectionBtn.addEventListener('click', () => clearScheduleSelection());
   elements.previousWeekBtn.addEventListener('click', () => changeAvailabilityWeek(-7));
@@ -4579,6 +5120,23 @@ function setupEventListeners() {
   elements.closeIssueModalBtn.addEventListener('click', closeIssueModal);
   elements.cancelIssueModalBtn.addEventListener('click', closeIssueModal);
   elements.issueForm.addEventListener('submit', handleIssueSubmit);
+  elements.issueDescription.addEventListener('input', () => {
+    updateIssueDescriptionCount();
+    if (elements.issueDescription.value.trim()) setIssueDescriptionError('');
+  });
+  elements.issueSuccessBackBtn.addEventListener('click', closeIssueModal);
+  elements.issueHistoryBackBtn.addEventListener('click', closeIssueModal);
+  elements.issueSuccessHistoryBtn.addEventListener('click', () => {
+    showIssueModalView('HISTORY');
+    loadMyIssues().then(() => requestAnimationFrame(() => elements.issueHistoryTitle.focus()));
+  });
+  elements.issueHistoryReportBtn.addEventListener('click', () => {
+    elements.issueDescription.value = '';
+    updateIssueDescriptionCount();
+    setIssueDescriptionError('');
+    showIssueModalView('FORM');
+    requestAnimationFrame(() => elements.issueDescription.focus());
+  });
 
   // Close the active modal on backdrop click or keep focus inside it on Escape/Tab.
   window.addEventListener('click', (e) => {

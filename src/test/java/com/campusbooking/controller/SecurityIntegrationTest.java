@@ -80,6 +80,8 @@ class SecurityIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/users/me"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/issues/mine"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

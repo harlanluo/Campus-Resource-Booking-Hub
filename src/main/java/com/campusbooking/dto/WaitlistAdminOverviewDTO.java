@@ -13,6 +13,7 @@ public class WaitlistAdminOverviewDTO {
     private String resourceName;
     private LocalDateTime requestedStart;
     private LocalDateTime requestedEnd;
+    private String status;
     private long waitingCount;
     private boolean activeOffer;
     private LocalDateTime offerExpiresAt;

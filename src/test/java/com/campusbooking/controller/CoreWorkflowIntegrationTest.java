@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.campusbooking.model.Booking;
 import com.campusbooking.model.Kit;
 import com.campusbooking.model.Resource;
+import com.campusbooking.model.ResourceIssue;
 import com.campusbooking.model.User;
 import com.campusbooking.model.Waitlist;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.KitRepository;
 import com.campusbooking.repository.ResourceRepository;
+import com.campusbooking.repository.ResourceIssueRepository;
 import com.campusbooking.repository.UserRepository;
 import com.campusbooking.repository.WaitlistRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -46,6 +48,7 @@ class CoreWorkflowIntegrationTest {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private UserRepository userRepository;
     @Autowired private ResourceRepository resourceRepository;
+    @Autowired private ResourceIssueRepository resourceIssueRepository;
     @Autowired private KitRepository kitRepository;
     @Autowired private BookingRepository bookingRepository;
     @Autowired private WaitlistRepository waitlistRepository;
@@ -105,6 +108,25 @@ class CoreWorkflowIntegrationTest {
         assertThat(studyRoom).isNotNull();
         assertThat(studyRoom.path("location").asText()).isEqualTo("Library, Level 2, A");
         assertThat(studyRoom.path("capacity").asInt()).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("Student booking responses include the resource location")
+    void studentBookingResponseIncludesLocation() throws Exception {
+        User owner = saveUser("loc-" + UUID.randomUUID().toString().substring(0, 8));
+        Resource resource = resourceRepository.saveAndFlush(Resource.builder()
+                .name("Location Booking Resource")
+                .type("ROOM")
+                .location("Library, Level 2")
+                .status(Resource.Status.AVAILABLE)
+                .build());
+        LocalDateTime start = LocalDateTime.now().plusDays(10).withNano(0);
+        saveBooking(owner, resource, start, Booking.Status.PENDING);
+
+        mockMvc.perform(get("/api/bookings/user/{userId}", owner.getId())
+                        .with(user(owner.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].resourceLocation").value("Library, Level 2"));
     }
 
     @Test
@@ -189,7 +211,7 @@ class CoreWorkflowIntegrationTest {
                 .endTime(start.plusHours(1))
                 .status(Booking.Status.PENDING)
                 .build());
-        waitlistRepository.saveAndFlush(Waitlist.builder()
+        Waitlist waitingEntry = waitlistRepository.saveAndFlush(Waitlist.builder()
                 .user(waiting)
                 .resource(resource)
                 .requestedStart(start)
@@ -209,6 +231,12 @@ class CoreWorkflowIntegrationTest {
                 .singleElement()
                 .extracting(Waitlist::getStatus)
                 .isEqualTo(Waitlist.Status.OFFERED);
+        mockMvc.perform(get("/api/waitlists/mine")
+                        .with(user(waiting.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(waitingEntry.getId()))
+                .andExpect(jsonPath("$[0].status").value("OFFERED"))
+                .andExpect(jsonPath("$[0].offerExpiresAt").isNotEmpty());
     }
 
     @Test
@@ -273,6 +301,43 @@ class CoreWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.status").value("REJECTED"));
         assertThat(resourceRepository.findById(resource.getId()).orElseThrow().getStatus())
                 .isEqualTo(Resource.Status.AVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Students can read only their own issue reports")
+    void studentIssueHistoryIsScopedToAuthenticatedOwner() throws Exception {
+        String suffix = UUID.randomUUID().toString();
+        User reporter = saveUser("issue-owner-" + suffix);
+        User otherStudent = saveUser("issue-other-" + suffix);
+        Resource ownResource = saveResource("Own Issue Resource " + suffix);
+        Resource otherResource = saveResource("Other Issue Resource " + suffix);
+        resourceIssueRepository.saveAndFlush(ResourceIssue.builder()
+                .resource(ownResource)
+                .reporter(reporter)
+                .description("Loose power connector")
+                .status(ResourceIssue.Status.PENDING)
+                .build());
+        resourceIssueRepository.saveAndFlush(ResourceIssue.builder()
+                .resource(otherResource)
+                .reporter(otherStudent)
+                .description("Private report from another student")
+                .status(ResourceIssue.Status.OPEN)
+                .build());
+
+        mockMvc.perform(get("/api/issues/mine")
+                        .with(user(reporter.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$[0].resourceName").value(ownResource.getName()))
+                .andExpect(jsonPath("$[0].description").value("Loose power connector"))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+
+        mockMvc.perform(get("/api/issues/mine")
+                        .with(user(otherStudent.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$[0].resourceName").value(otherResource.getName()))
+                .andExpect(jsonPath("$[0].description").value("Private report from another student"));
     }
 
     @Test

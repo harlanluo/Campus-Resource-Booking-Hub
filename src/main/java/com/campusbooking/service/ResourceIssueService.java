@@ -56,6 +56,16 @@ public class ResourceIssueService {
                 .toList();
     }
 
+    public List<IssueResponseDTO> getOwnIssues(String username) {
+        User reporter = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "Authenticated user was not found."));
+        return issueRepository.findByReporterIdOrderByReportedTimeDesc(reporter.getId())
+                .stream()
+                .map(IssueResponseDTO::from)
+                .toList();
+    }
+
     @Transactional
     public IssueResponseDTO approveIssue(Long issueId) {
         ResourceIssue issue = getPendingIssue(issueId, "approved");

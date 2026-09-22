@@ -1117,7 +1117,8 @@ body {
 }
 
 .status-pill.CONFIRMED,
-.status-pill.APPROVED {
+.status-pill.APPROVED,
+.status-pill.ACCEPTED {
   background: var(--emerald-50);
   color: var(--emerald-700);
   border: 1px solid var(--emerald-200);
@@ -1142,9 +1143,9 @@ body {
 }
 
 .status-pill.WAITING {
-  background: var(--primary-50);
-  color: var(--primary-700);
-  border: 1px solid var(--primary-200);
+  background: var(--amber-50);
+  color: var(--amber-700);
+  border: 1px solid var(--amber-200);
 }
 
 .status-pill.OFFERED {
@@ -2268,6 +2269,326 @@ button.schedule-slot { cursor: pointer; }
   .waitlist-actions .btn,
   .leave-waitlist-btn {
     width: 100%;
+  }
+}
+
+/* Task 5 student workflow states */
+.status-pill.DECLINED,
+.status-pill.EXPIRED,
+.status-pill.LEFT,
+.status-pill.CANCELLED {
+  border: 1px solid var(--slate-200);
+  background: var(--slate-100);
+  color: var(--slate-700);
+}
+
+.waitlist-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+.waitlist-state-section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.waitlist-state-section > h3 {
+  margin: 0;
+  color: var(--slate-800);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+
+.waitlist-section-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 0.75rem;
+}
+
+.waitlist-card {
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.waitlist-card.history-card {
+  box-shadow: none;
+  background: var(--slate-50);
+}
+
+.waitlist-card-copy > span {
+  overflow-wrap: anywhere;
+}
+
+.waitlist-resource-name {
+  overflow-wrap: anywhere;
+}
+
+.waitlist-actions {
+  display: grid;
+  justify-items: end;
+  gap: 0.55rem;
+  max-width: 19rem;
+}
+
+.waitlist-offer-note {
+  margin: 0;
+  color: var(--slate-600);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.waitlist-offer-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.waitlist-empty-state .btn,
+.empty-bookings-find-btn {
+  margin-top: 0.8rem;
+}
+
+.booking-location-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+  color: var(--slate-600);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.student-action-success {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--emerald-300);
+  border-radius: var(--radius-lg);
+  background: var(--emerald-50);
+}
+
+.student-action-success[hidden] {
+  display: none;
+}
+
+.student-action-success-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--emerald-100);
+  color: var(--emerald-800);
+  font-weight: 800;
+}
+
+.student-action-success-copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.student-action-success-copy strong {
+  color: var(--slate-900);
+}
+
+.student-action-success-copy p,
+.student-action-success-copy > span {
+  margin: 0;
+  color: var(--slate-600);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.student-action-success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.issue-description-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.issue-character-count {
+  flex: 0 0 auto;
+  color: var(--slate-500);
+  font-size: 0.72rem;
+}
+
+.field-error {
+  margin: 0.25rem 0 0;
+  color: var(--rose-700);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.issue-success-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.7rem;
+  padding: 1.2rem 0.25rem 0.25rem;
+  text-align: center;
+}
+
+.issue-success-state[hidden],
+.issue-history-state[hidden] {
+  display: none;
+}
+
+.issue-success-state h4,
+.issue-history-state h4 {
+  margin: 0;
+  color: var(--slate-900);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.issue-success-state > p {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--slate-600);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.issue-success-resource {
+  color: var(--slate-800);
+  font-size: 0.85rem;
+}
+
+.issue-state-actions {
+  width: 100%;
+  margin-top: 0.4rem;
+}
+
+.issue-history-state {
+  display: grid;
+  gap: 0.8rem;
+  padding-top: 0.5rem;
+}
+
+.issue-history-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.issue-history-card {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+}
+
+.issue-history-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.issue-history-card-heading > div {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.issue-history-card-heading strong {
+  color: var(--slate-900);
+  overflow-wrap: anywhere;
+}
+
+.issue-history-card-heading > div > span,
+.issue-history-date {
+  color: var(--slate-500);
+  font-size: 0.75rem;
+}
+
+.issue-history-card > p {
+  margin: 0;
+  color: var(--slate-700);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.issue-history-card .status-pill {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.home-upcoming-empty .btn {
+  justify-self: start;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 700px) {
+  .student-action-success {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .student-action-success-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .waitlist-card {
+    display: grid;
+    gap: 0.8rem;
+    padding: 1rem;
+  }
+
+  .waitlist-actions {
+    max-width: none;
+    justify-items: stretch;
+  }
+
+  .waitlist-offer-note {
+    text-align: left;
+  }
+
+  .waitlist-offer-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .waitlist-offer-buttons .btn,
+  .waitlist-card > .btn-danger {
+    min-height: 2.75rem;
+  }
+
+  .issue-state-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .issue-state-actions .btn {
+    justify-content: center;
+    min-height: 2.75rem;
+  }
+
+  .issue-history-card-heading {
+    flex-direction: column;
   }
 }
 

@@ -38,6 +38,9 @@ public class BookingResponseDTO {
     /** Type label of the resource (e.g. ROOM, LAB, EQUIPMENT). */
     private String resourceType;
 
+    /** Student-safe location label for the booked resource. */
+    private String resourceLocation;
+
     // ── Booking window ────────────────────────────────────────────────────────
 
     /** The start of the reserved time slot. */
@@ -95,6 +98,7 @@ public class BookingResponseDTO {
                 .resourceId(booking.getResource().getId())
                 .resourceName(booking.getResource().getName())
                 .resourceType(booking.getResource().getType())
+                .resourceLocation(booking.getResource().getLocation())
                 .startTime(booking.getStartTime())
                 .endTime(booking.getEndTime())
                 .status(effectiveStatus(booking, now))

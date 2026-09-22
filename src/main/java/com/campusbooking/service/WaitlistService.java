@@ -82,18 +82,16 @@ public class WaitlistService {
     @Transactional
     public List<WaitlistResponseDTO> getOwnActiveEntries(String username) {
         User user = requireUser(username);
-        LocalDateTime now = LocalDateTime.now();
-        List<Long> resourceIds = activeEntries(user.getId()).stream()
-                .map(entry -> entry.getResource().getId())
-                .distinct()
-                .sorted()
-                .toList();
-        for (Long resourceId : resourceIds) {
-            Resource resource = lockResource(resourceId);
-            reevaluateExpiredOfferIntervalsLocked(
-                    resource, expireOffersForResourceLocked(resource, now), now);
-        }
+        refreshOwnActiveEntries(user);
         return activeEntries(user.getId()).stream().map(this::toResponse).toList();
+    }
+
+    @Transactional
+    public List<WaitlistResponseDTO> getOwnEntries(String username) {
+        User user = requireUser(username);
+        refreshOwnActiveEntries(user);
+        return waitlistRepository.findByUserIdOrderByRequestTimeDescIdDesc(user.getId())
+                .stream().map(this::toResponse).toList();
     }
 
     @Transactional
@@ -269,6 +267,7 @@ public class WaitlistService {
                     .resourceName(slot.resourceName())
                     .requestedStart(slot.start())
                     .requestedEnd(slot.end())
+                    .status(offer == null ? Waitlist.Status.WAITING.name() : Waitlist.Status.OFFERED.name())
                     .waitingCount(waitingCount)
                     .activeOffer(offer != null)
                     .offerExpiresAt(offer == null ? null : offer.getOfferExpiresAt())
@@ -323,7 +322,7 @@ public class WaitlistService {
             return;
         }
 
-        for (Waitlist next : waitlistRepository.findWaitingAffectedByReleaseForUpdate(
+        for (Waitlist next : waitlistRepository.findWaitingForExactReleasedSlotForUpdate(
                 resource.getId(), releasedStart, releasedEnd)) {
             if (!next.getRequestedStart().isAfter(now)) {
                 next.setStatus(Waitlist.Status.EXPIRED);
@@ -346,12 +345,27 @@ public class WaitlistService {
             log.info("[Waitlist Offer] Entry {} offered resource {} interval {} to {} until {}.",
                     next.getId(), resource.getId(), next.getRequestedStart(),
                     next.getRequestedEnd(), next.getOfferExpiresAt());
+            return;
         }
     }
 
     private List<Waitlist> activeEntries(Long userId) {
         return waitlistRepository.findByUserIdAndStatusInOrderByRequestedStartAscRequestTimeAscIdAsc(
                 userId, List.of(Waitlist.Status.WAITING, Waitlist.Status.OFFERED));
+    }
+
+    private void refreshOwnActiveEntries(User user) {
+        LocalDateTime now = LocalDateTime.now();
+        List<Long> resourceIds = activeEntries(user.getId()).stream()
+                .map(entry -> entry.getResource().getId())
+                .distinct()
+                .sorted()
+                .toList();
+        for (Long resourceId : resourceIds) {
+            Resource resource = lockResource(resourceId);
+            reevaluateExpiredOfferIntervalsLocked(
+                    resource, expireOffersForResourceLocked(resource, now), now);
+        }
     }
 
     private WaitlistResponseDTO toResponse(Waitlist entry) {
