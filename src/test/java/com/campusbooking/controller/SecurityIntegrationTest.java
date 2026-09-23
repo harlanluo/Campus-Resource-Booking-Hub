@@ -55,6 +55,8 @@ class SecurityIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/kits/1"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/kit-bookings/history"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -89,6 +91,8 @@ class SecurityIntegrationTest {
     @DisplayName("A student cannot call administrator booking operations")
     void studentCannotCallAdminBookingOperations() throws Exception {
         mockMvc.perform(get("/api/bookings"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/kit-bookings/history"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(put("/api/bookings/2/approve"))
                 .andExpect(status().isForbidden());
@@ -290,6 +294,8 @@ class SecurityIntegrationTest {
         mockMvc.perform(get("/api/bookings").session(session))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/bookings/history").session(session))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/kit-bookings/history").session(session))
                 .andExpect(status().isOk());
     }
 

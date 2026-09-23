@@ -48,6 +48,19 @@ class KitBookingRepositoryIntegrationTest {
     }
 
     @Test
+    @DisplayName("Admin Kit history includes closed parent reservations once")
+    void adminHistory_returnsClosedParentsWithoutChildRows() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 21, 12, 0);
+        KitBooking parent = kitBookingRepository.findById(1L).orElseThrow();
+        parent.setStatus(KitBooking.Status.CANCELLED);
+        kitBookingRepository.saveAndFlush(parent);
+
+        assertThat(kitBookingRepository.findHistoryForAdmin(now))
+                .extracting(KitBooking::getBookingReference)
+                .containsExactly("KIT-2026-000001");
+    }
+
+    @Test
     @DisplayName("Active Kit children still block resource overlap and closed children release it")
     void childRows_remainOccupancySource() {
         LocalDateTime start = LocalDateTime.of(2026, 10, 6, 13, 0);

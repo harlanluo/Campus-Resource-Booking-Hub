@@ -133,6 +133,13 @@ public class KitBookingService {
                 .toList();
     }
 
+    public List<KitBookingResponseDTO> getAdminHistory() {
+        LocalDateTime now = LocalDateTime.now();
+        return kitBookingRepository.findHistoryForAdmin(now).stream()
+                .map(parent -> toResponse(parent, now))
+                .toList();
+    }
+
     public String getReference(Long id) {
         return kitBookingRepository.findById(id)
                 .map(KitBooking::getBookingReference)

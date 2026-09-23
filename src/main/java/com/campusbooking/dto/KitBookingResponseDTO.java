@@ -61,7 +61,9 @@ public class KitBookingResponseDTO {
                         .map(child -> new ResourceSummary(
                                 child.getResource().getId(),
                                 child.getResource().getName(),
-                                child.getResource().getType()))
+                                child.getResource().getType(),
+                                child.getResource().getLocation(),
+                                child.getResource().getCapacity()))
                         .toList())
                 .resourceCount(orderedChildren.size())
                 .groupMemberIds(members.stream().map(User::getId).toList())
@@ -77,5 +79,7 @@ public class KitBookingResponseDTO {
         private Long id;
         private String name;
         private String type;
+        private String location;
+        private Integer capacity;
     }
 }

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=11.1" />
+  <link rel="stylesheet" href="style.css?v=11.2" />
 </head>
 <body>
   <!-- Public authentication entry point. The authenticated shell stays hidden until /me succeeds. -->
@@ -583,43 +583,43 @@
                 <line x1="12" y1="5" x2="12" y2="19"/>
                 <line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
-              <span>Add New Resource</span>
+              <span>Add resource</span>
             </button>
           </div>
+        </div>
+
+        <div class="admin-feedback" id="adminFeedback" role="status" aria-live="polite" hidden>
+          <p id="adminFeedbackMessage"></p>
+          <button type="button" class="admin-feedback-dismiss" id="dismissAdminFeedbackBtn" aria-label="Dismiss message">&times;</button>
         </div>
 
         <!-- Overview: metrics and operational waitlist snapshot -->
         <div class="admin-stats-grid" data-admin-view="overview">
           <div class="admin-stat-card warning">
-            <div class="stat-icon">⏳</div>
             <div class="stat-info">
               <span class="stat-number" id="statPendingBookings">0</span>
               <span class="stat-title">Pending Approvals</span>
             </div>
           </div>
           <div class="admin-stat-card success">
-            <div class="stat-icon">✅</div>
             <div class="stat-info">
               <span class="stat-number" id="statApprovedBookings">0</span>
-              <span class="stat-title">Approved Bookings</span>
+              <span class="stat-title">Confirmed bookings</span>
             </div>
           </div>
           <div class="admin-stat-card info">
-            <div class="stat-icon">🏛️</div>
             <div class="stat-info">
               <span class="stat-number" id="statTotalResources">0</span>
               <span class="stat-title">Total Resources</span>
             </div>
           </div>
           <div class="admin-stat-card danger">
-            <div class="stat-icon">🔧</div>
             <div class="stat-info">
               <span class="stat-number" id="statMaintenanceResources">0</span>
               <span class="stat-title">In Maintenance</span>
             </div>
           </div>
           <div class="admin-stat-card warning">
-            <div class="stat-icon">⚠️</div>
             <div class="stat-info">
               <span class="stat-number" id="statOpenIssues">0</span>
               <span class="stat-title">Actionable Issues</span>
@@ -636,14 +636,24 @@
               <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading actions…</span></div>
             </div>
           </section>
-          <section class="section-container admin-overview-card" aria-labelledby="adminUpcomingReservationsTitle">
-            <div class="section-title-bar">
-              <h2 class="section-title" id="adminUpcomingReservationsTitle">Upcoming reservations</h2>
-            </div>
-            <div class="admin-overview-list" id="adminUpcomingReservationsList" aria-live="polite">
-              <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading reservations…</span></div>
-            </div>
-          </section>
+          <div class="admin-overview-side">
+            <section class="section-container admin-overview-card" aria-labelledby="adminUpcomingReservationsTitle">
+              <div class="section-title-bar">
+                <h2 class="section-title" id="adminUpcomingReservationsTitle">Upcoming and active</h2>
+              </div>
+              <div class="admin-overview-list" id="adminUpcomingReservationsList" aria-live="polite">
+                <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading reservations…</span></div>
+              </div>
+            </section>
+            <section class="section-container admin-overview-card" aria-labelledby="adminResourceHealthTitle">
+              <div class="section-title-bar">
+                <h2 class="section-title" id="adminResourceHealthTitle">Resource health</h2>
+              </div>
+              <div class="admin-overview-list" id="adminResourceHealthList" aria-live="polite">
+                <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading resource health…</span></div>
+              </div>
+            </section>
+          </div>
         </div>
 
         <!-- Booking requests: pending reservations only -->
@@ -665,9 +675,10 @@
               <thead>
                 <tr>
                   <th>Reference</th>
-                  <th>User</th>
-                  <th>Reservation</th>
-                  <th>Time</th>
+                  <th>Student and group</th>
+                  <th>Resource or Project Kit</th>
+                  <th>Requested date and time</th>
+                  <th>Location or Kit contents</th>
                   <th>Status</th>
                   <th style="text-align: right;">Action</th>
                 </tr>
@@ -682,19 +693,21 @@
         <!-- Reservations: approved/current records and standard booking history -->
         <div class="section-container" id="adminReservationsSection" data-admin-view="reservations" style="margin-top: 2rem;">
           <div class="section-title-bar">
-            <h2 class="section-title">Approved and current reservations</h2>
+            <h2 class="section-title">Reservations</h2>
             <span class="count-badge" id="adminReservationsCountBadge">0 reservations</span>
           </div>
-          <p class="booking-view-description">Current approved reservations are shown first, followed by closed and expired booking history.</p>
+          <p class="booking-view-description">Upcoming and active reservations appear first. Completed, cancelled, rejected, and expired records are grouped under history.</p>
           <div class="table-responsive">
             <table class="admin-table" id="adminReservationsTable">
               <thead>
                 <tr>
                   <th>Reference</th>
-                  <th>User</th>
+                  <th>Student and group</th>
                   <th>Reservation</th>
-                  <th>Time</th>
+                  <th>Date and time</th>
+                  <th>Location or included resources</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="adminReservationsTbody"></tbody>
@@ -705,10 +718,7 @@
         <!-- Overview: read-only waitlist operations snapshot -->
         <div class="section-container" id="adminWaitlistSection" data-admin-view="overview" style="margin-top: 2.5rem;">
           <div class="section-title-bar">
-            <h2 class="section-title">
-              <span>⏱️</span>
-              <span>Waitlist Activity</span>
-            </h2>
+            <h2 class="section-title">Waitlist activity</h2>
             <span class="count-badge" id="adminWaitlistCountBadge">0 active slots</span>
           </div>
           <p class="booking-view-description">Exact-slot status, queue size, and offer expiry are shown here. Student identities stay private. Students must accept an offer before it creates a booking request, which then follows the normal Admin approval queue.</p>
@@ -775,10 +785,7 @@
         <!-- Reported resource issues -->
         <div class="section-container" id="adminIssuesSection" data-admin-view="issues" style="margin-top: 2.5rem;">
           <div class="section-title-bar">
-            <h2 class="section-title">
-              <span>⚠️</span>
-              <span>Issues needing attention</span>
-            </h2>
+            <h2 class="section-title">Issues needing attention</h2>
             <span class="count-badge" id="issuesCountBadge">0 Issues</span>
           </div>
 
@@ -1031,9 +1038,11 @@
       </div>
 
       <form id="addResourceForm" class="modal-form">
+        <p class="form-error-message" id="addResourceFormError" role="alert" hidden></p>
         <div class="form-group">
           <label for="newResourceName">Resource Name <span class="required">*</span></label>
-          <input type="text" id="newResourceName" placeholder="e.g. Media Studio 305" required />
+          <input type="text" id="newResourceName" maxlength="100" placeholder="e.g. Media Studio 305" required aria-describedby="newResourceNameError" />
+          <p class="field-error" id="newResourceNameError" hidden role="alert"></p>
         </div>
 
         <div class="form-row">
@@ -1048,7 +1057,7 @@
           <div class="form-group">
             <label for="newResourceStatus">Initial Status <span class="required">*</span></label>
             <select id="newResourceStatus" required>
-              <option value="AVAILABLE">Available</option>
+              <option value="AVAILABLE">Operational</option>
               <option value="MAINTENANCE">Maintenance</option>
               <option value="UNAVAILABLE">Unavailable</option>
             </select>
@@ -1060,22 +1069,23 @@
             <label for="newResourceLocation">Location</label>
             <input type="text" id="newResourceLocation" maxlength="160" placeholder="e.g. Library, Level 2, A" />
           </div>
-          <div class="form-group">
+          <div class="form-group" id="newResourceCapacityGroup">
             <label for="newResourceCapacity">Capacity</label>
-            <input type="number" id="newResourceCapacity" min="1" step="1" inputmode="numeric" placeholder="Rooms and labs" />
-            <span class="form-help-text">Use a positive whole number for rooms or labs. Leave blank for equipment.</span>
+            <input type="number" id="newResourceCapacity" min="1" step="1" inputmode="numeric" placeholder="e.g. 8" aria-describedby="newResourceCapacityHelp newResourceCapacityError" />
+            <span class="form-help-text" id="newResourceCapacityHelp">Use a positive whole number for rooms and labs.</span>
+            <p class="field-error" id="newResourceCapacityError" hidden role="alert"></p>
           </div>
         </div>
 
         <div class="form-group">
           <label for="newResourceDescription">Description / Features</label>
-          <textarea id="newResourceDescription" rows="3" placeholder="Provide details such as seating capacity, equipment specs, or building location..."></textarea>
+          <textarea id="newResourceDescription" rows="3" maxlength="500" placeholder="Provide useful details for students..."></textarea>
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" id="cancelAddResourceModalBtn">Cancel</button>
           <button type="submit" class="btn btn-primary" id="submitAddResourceBtn">
-            <span>Save Resource</span>
+            <span>Add resource</span>
           </button>
         </div>
       </form>
@@ -1156,6 +1166,6 @@
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <!-- Main JavaScript Bundle -->
-  <script src="app.js?v=11.1"></script>
+  <script src="app.js?v=11.7"></script>
 </body>
 </html>

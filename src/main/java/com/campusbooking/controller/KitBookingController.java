@@ -25,6 +25,12 @@ public class KitBookingController {
         return ResponseEntity.ok(kitBookingService.getAdminActive());
     }
 
+    @GetMapping("/history")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<KitBookingResponseDTO>> getAdminHistory() {
+        return ResponseEntity.ok(kitBookingService.getAdminHistory());
+    }
+
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('ADMIN') or @apiAuthorization.isSelf(#userId, authentication)")
     public ResponseEntity<List<KitBookingResponseDTO>> getUserActive(@PathVariable Long userId) {

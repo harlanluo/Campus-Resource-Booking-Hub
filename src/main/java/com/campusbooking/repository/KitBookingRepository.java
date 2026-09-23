@@ -52,4 +52,14 @@ public interface KitBookingRepository extends JpaRepository<KitBooking, Long> {
            ORDER BY kb.startTime
            """)
     List<KitBooking> findActiveForAdmin(@Param("cutoff") LocalDateTime cutoff);
+
+    @Query("""
+           SELECT kb FROM KitBooking kb
+           WHERE kb.status IN (com.campusbooking.model.KitBooking.Status.REJECTED,
+                               com.campusbooking.model.KitBooking.Status.CANCELLED,
+                               com.campusbooking.model.KitBooking.Status.COMPLETED)
+              OR kb.endTime <= :cutoff
+           ORDER BY kb.endTime DESC
+           """)
+    List<KitBooking> findHistoryForAdmin(@Param("cutoff") LocalDateTime cutoff);
 }

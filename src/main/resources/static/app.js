@@ -21,6 +21,7 @@ const state = {
   adminBookings: [],
   adminBookingHistory: [],
   adminKitBookings: [],
+  adminKitBookingHistory: [],
   adminIssues: [],
   adminWaitlistOverview: [],
   activeTab: 'home',
@@ -56,6 +57,8 @@ const state = {
   kitsLoaded: false,
   adminLoadError: null,
   adminHistoryLoadError: null,
+  adminWaitlistLoadError: null,
+  adminWaitlistLoaded: false,
   adminDataLoaded: false,
   userDataLoaded: false,
   homeReservationError: false,
@@ -311,6 +314,10 @@ const elements = {
   adminPageDescription: document.getElementById('adminPageDescription'),
   adminNeedsAttentionList: document.getElementById('adminNeedsAttentionList'),
   adminUpcomingReservationsList: document.getElementById('adminUpcomingReservationsList'),
+  adminResourceHealthList: document.getElementById('adminResourceHealthList'),
+  adminFeedback: document.getElementById('adminFeedback'),
+  adminFeedbackMessage: document.getElementById('adminFeedbackMessage'),
+  dismissAdminFeedbackBtn: document.getElementById('dismissAdminFeedbackBtn'),
   adminAddResourceAction: document.getElementById('adminAddResourceAction'),
   adminResourcesTbody: document.getElementById('adminResourcesTbody'),
   countPendingAdminBookings: document.getElementById('countPendingAdminBookings'),
@@ -376,12 +383,16 @@ const elements = {
   closeAddResourceModalBtn: document.getElementById('closeAddResourceModalBtn'),
   cancelAddResourceModalBtn: document.getElementById('cancelAddResourceModalBtn'),
   addResourceForm: document.getElementById('addResourceForm'),
+  addResourceFormError: document.getElementById('addResourceFormError'),
   newResourceName: document.getElementById('newResourceName'),
   newResourceType: document.getElementById('newResourceType'),
   newResourceStatus: document.getElementById('newResourceStatus'),
   newResourceDescription: document.getElementById('newResourceDescription'),
   newResourceLocation: document.getElementById('newResourceLocation'),
   newResourceCapacity: document.getElementById('newResourceCapacity'),
+  newResourceCapacityGroup: document.getElementById('newResourceCapacityGroup'),
+  newResourceNameError: document.getElementById('newResourceNameError'),
+  newResourceCapacityError: document.getElementById('newResourceCapacityError'),
 
   // Issue Modal
   issueModalBackdrop: document.getElementById('issueModalBackdrop'),
@@ -425,7 +436,7 @@ const elements = {
 };
 
 const STATUS_LABELS = Object.freeze({
-  AVAILABLE: 'Available',
+  AVAILABLE: 'Operational',
   MAINTENANCE: 'Maintenance',
   UNAVAILABLE: 'Unavailable',
   PENDING: 'Awaiting approval',
@@ -435,7 +446,7 @@ const STATUS_LABELS = Object.freeze({
   REJECTED: 'Rejected',
   CANCELLED: 'Cancelled',
   WAITING: 'Waiting',
-  OFFERED: 'Slot available',
+  OFFERED: 'Slot offered',
   EXPIRED: 'Expired',
   OPEN: 'Under review',
   RESOLVED: 'Resolved',
@@ -457,7 +468,7 @@ const STUDENT_STATUS_LABELS = Object.freeze({
   }),
   waitlist: Object.freeze({
     WAITING: 'Waiting',
-    OFFERED: 'Slot available',
+    OFFERED: 'Slot offered',
     ACCEPTED: 'Accepted',
     DECLINED: 'Declined',
     EXPIRED: 'Expired',
@@ -524,6 +535,39 @@ function getStudentErrorMessage(error, fallback) {
   return fallback;
 }
 
+function getAdminErrorMessage(error, fallback) {
+  if (error?.status === 401) return 'Your session has expired. Sign in again.';
+  if (error?.status === 403) return 'You do not have permission to complete this action.';
+  if (error?.status === 404) return 'This item is no longer available. The list is refreshing.';
+  if (error?.status === 409 || error?.status === 400) {
+    return 'This item has already changed or can no longer be updated. The list is refreshing.';
+  }
+  return fallback;
+}
+
+function setAdminFeedback(message, type = 'success') {
+  if (!elements.adminFeedback || !elements.adminFeedbackMessage) return;
+  elements.adminFeedbackMessage.textContent = message;
+  elements.adminFeedback.hidden = false;
+  elements.adminFeedback.className = `admin-feedback ${type}`;
+  const urgent = type === 'error' || type === 'warning';
+  elements.adminFeedback.setAttribute('role', urgent ? 'alert' : 'status');
+  elements.adminFeedback.setAttribute('aria-live', urgent ? 'assertive' : 'polite');
+}
+
+function clearAdminFeedback() {
+  if (!elements.adminFeedback) return;
+  elements.adminFeedback.hidden = true;
+  if (elements.adminFeedbackMessage) elements.adminFeedbackMessage.textContent = '';
+}
+
+function adminActionFailed(error, fallback) {
+  const message = getAdminErrorMessage(error, fallback);
+  const stale = [400, 404, 409].includes(error?.status);
+  setAdminFeedback(message, stale ? 'warning' : 'error');
+  return stale;
+}
+
 function getRoleLabel(role) {
   return role === 'ADMIN' ? 'Administrator' : 'Student';
 }
@@ -573,7 +617,7 @@ const api = {
   // Resources
   async getResources() {
     const res = await fetch('/api/resources');
-    if (!res.ok) throw new Error('Failed to fetch resources');
+    if (!res.ok) throw await responseError(res, 'We could not load resources. Try again.');
     return res.json();
   },
 
@@ -583,7 +627,7 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error(await res.text() || 'Failed to create resource');
+    if (!res.ok) throw await responseError(res, 'We could not add this resource. Check the details and try again.');
     return res.json();
   },
 
@@ -593,7 +637,7 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
-    if (!res.ok) throw new Error('Failed to update resource status');
+    if (!res.ok) throw await responseError(res, 'We could not change the resource status. Try again.');
     return res.json();
   },
 
@@ -617,7 +661,7 @@ const api = {
     const res = await fetch(`/api/resources/${id}`, {
       method: 'DELETE'
     });
-    if (!res.ok) throw new Error('Failed to delete resource');
+    if (!res.ok) throw await responseError(res, 'We could not delete this resource. Try again.');
     return true;
   },
 
@@ -662,6 +706,12 @@ const api = {
   async getAllKitBookings() {
     const res = await fetch('/api/kit-bookings');
     if (!res.ok) throw await responseError(res, 'Failed to fetch Project Kit requests');
+    return res.json();
+  },
+
+  async getAdminKitBookingHistory() {
+    const res = await fetch('/api/kit-bookings/history');
+    if (!res.ok) throw await responseError(res, 'Failed to fetch Project Kit reservation history');
     return res.json();
   },
 
@@ -843,7 +893,7 @@ const api = {
   // Resource Issues
   async getIssues() {
     const res = await fetch('/api/issues');
-    if (!res.ok) throw new Error('Failed to fetch resource issues');
+    if (!res.ok) throw await responseError(res, 'We could not load reported issues. Try again.');
     return res.json();
   },
 
@@ -865,28 +915,19 @@ const api = {
 
   async approveIssue(id) {
     const res = await fetch(`/api/issues/${id}/approve`, { method: 'PUT' });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Failed to approve resource issue');
-    }
+    if (!res.ok) throw await responseError(res, 'We could not update this issue. Try again.');
     return res.json();
   },
 
   async rejectIssue(id) {
     const res = await fetch(`/api/issues/${id}/reject`, { method: 'PUT' });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Failed to reject resource issue');
-    }
+    if (!res.ok) throw await responseError(res, 'We could not update this issue. Try again.');
     return res.json();
   },
 
   async resolveIssue(id) {
     const res = await fetch(`/api/issues/${id}/resolve`, { method: 'PUT' });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Failed to resolve resource issue');
-    }
+    if (!res.ok) throw await responseError(res, 'We could not update this issue. Try again.');
     return res.json();
   }
 };
@@ -949,7 +990,8 @@ function escapeHtml(str) {
 const modalState = {
   active: null,
   close: null,
-  previousFocus: null
+  previousFocus: null,
+  initialFocus: null
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -966,6 +1008,23 @@ function getFocusableElements(container) {
     .filter((element) => element.offsetParent !== null || element === document.activeElement);
 }
 
+function getModalInitialFocus(backdrop = modalState.active) {
+  if (!backdrop) return null;
+  const target = typeof modalState.initialFocus === 'function'
+    ? modalState.initialFocus()
+    : modalState.initialFocus;
+  return target?.isConnected ? target : getFocusableElements(backdrop)[0] || backdrop;
+}
+
+function focusActiveModal(backdrop = modalState.active) {
+  if (!backdrop || modalState.active !== backdrop || backdrop.getAttribute('aria-hidden') === 'true') return;
+
+  // Resolve the newly opened visibility state before calling focus.
+  void window.getComputedStyle(backdrop).visibility;
+  const target = getModalInitialFocus(backdrop);
+  if (target && document.activeElement !== target) target.focus?.({ preventScroll: true });
+}
+
 function openManagedModal(backdrop, initialFocus, closeHandler) {
   if (!backdrop) return;
   if (modalState.active && modalState.active !== backdrop) {
@@ -974,19 +1033,21 @@ function openManagedModal(backdrop, initialFocus, closeHandler) {
 
   modalState.active = backdrop;
   modalState.close = closeHandler;
+  modalState.initialFocus = initialFocus;
   modalState.previousFocus = document.activeElement instanceof HTMLElement
     ? document.activeElement
     : null;
   backdrop.classList.add('open');
   backdrop.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
+
   elements.app?.setAttribute('inert', '');
 
-  requestAnimationFrame(() => {
-    const target = typeof initialFocus === 'function' ? initialFocus() : initialFocus;
-    const firstFocusable = getFocusableElements(backdrop)[0];
-    (target || firstFocusable || backdrop).focus?.();
-  });
+  focusActiveModal(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => focusActiveModal(backdrop)));
+  window.setTimeout(() => focusActiveModal(backdrop), 0);
+  // Reapply after the opening click's default focus handling has completed.
+  window.setTimeout(() => focusActiveModal(backdrop), 50);
 }
 
 function closeManagedModal(backdrop, restoreFocus = true) {
@@ -997,6 +1058,7 @@ function closeManagedModal(backdrop, restoreFocus = true) {
     modalState.active = null;
     modalState.close = null;
     modalState.previousFocus = null;
+    modalState.initialFocus = null;
     document.body.classList.remove('modal-open');
     elements.app?.removeAttribute('inert');
     if (restoreFocus && previousFocus?.isConnected && previousFocus.focus
@@ -1010,6 +1072,20 @@ function closeManagedModal(backdrop, restoreFocus = true) {
 
 function closeActiveModal() {
   modalState.close?.();
+}
+
+function handleModalFocusOut() {
+  if (!modalState.active) return;
+  const activeModal = modalState.active;
+  window.setTimeout(() => {
+    if (modalState.active !== activeModal || activeModal.contains(document.activeElement)) return;
+    focusActiveModal(activeModal);
+  }, 0);
+}
+
+function handleModalFocusIn(event) {
+  if (!modalState.active || modalState.active.contains(event.target)) return;
+  focusActiveModal(modalState.active);
 }
 
 function showConfirmDialog({
@@ -1040,7 +1116,7 @@ function showConfirmDialog({
 
     openManagedModal(
       elements.confirmModalBackdrop,
-      elements.confirmModalConfirmBtn,
+      elements.confirmModalCancelBtn,
       () => finish(false)
     );
   });
@@ -1064,6 +1140,12 @@ function handleModalKeydown(event) {
 
   const first = focusables[0];
   const last = focusables[focusables.length - 1];
+  if (!modalState.active.contains(document.activeElement)) {
+    event.preventDefault();
+    const initialFocus = getModalInitialFocus(modalState.active);
+    (focusables.includes(initialFocus) ? initialFocus : first).focus({ preventScroll: true });
+    return;
+  }
   if (event.shiftKey && document.activeElement === first) {
     event.preventDefault();
     last.focus();
@@ -1266,6 +1348,7 @@ function resetPrivateState() {
   state.adminBookings = [];
   state.adminBookingHistory = [];
   state.adminKitBookings = [];
+  state.adminKitBookingHistory = [];
   state.adminIssues = [];
   state.adminWaitlistOverview = [];
   state.activeTab = 'home';
@@ -1298,6 +1381,8 @@ function resetPrivateState() {
   state.kitLoadError = null;
   state.adminLoadError = null;
   state.adminHistoryLoadError = null;
+  state.adminWaitlistLoadError = null;
+  state.adminWaitlistLoaded = false;
   state.adminDataLoaded = false;
   state.userDataLoaded = false;
 
@@ -1360,6 +1445,7 @@ function resetPrivateState() {
   elements.resourcesGrid.innerHTML = '';
   elements.resourceDetailContent.innerHTML = '';
   elements.adminWaitlistTbody.innerHTML = '';
+  clearAdminFeedback();
   elements.issueForm?.reset();
   elements.issueResourceId.value = '';
   elements.issueDescriptionError.hidden = true;
@@ -1612,6 +1698,7 @@ function switchTab(tabId, options = {}) {
   }
 
   const routeTitle = isAdmin ? ADMIN_ROUTES[navKey].title : STUDENT_ROUTES[navKey].title;
+  if (isAdmin && state.activeNavKey !== navKey) clearAdminFeedback();
   if (state.activeTab === 'find-availability' && tabId !== 'find-availability') {
     state.timeFirstRequestSequence += 1;
   }
@@ -2294,21 +2381,32 @@ async function loadMyWaitlists() {
 }
 
 async function loadAdminData() {
+  const shouldShowLoading = !state.adminDataLoaded || Boolean(state.adminLoadError);
+  state.adminLoadError = null;
+  if (shouldShowLoading) renderAdminLoadingStates();
   const waitlistPromise = loadAdminWaitlistOverview();
   try {
-    const [allBookings, allKitBookings, allIssues, historyResult] = await Promise.all([
+    const [allBookings, allKitBookings, allIssues, bookingHistoryResult, kitHistoryResult] = await Promise.all([
       api.getAllBookings(),
       api.getAllKitBookings(),
       api.getIssues(),
       api.getAdminBookingHistory()
+        .then((data) => ({ ok: true, data }))
+        .catch((error) => ({ ok: false, error })),
+      api.getAdminKitBookingHistory()
         .then((data) => ({ ok: true, data }))
         .catch((error) => ({ ok: false, error }))
     ]);
     state.adminBookings = allBookings;
     state.adminKitBookings = allKitBookings;
     state.adminIssues = allIssues;
-    state.adminBookingHistory = historyResult.ok ? historyResult.data : [];
-    state.adminHistoryLoadError = historyResult.ok ? null : historyResult.error;
+    state.adminBookingHistory = bookingHistoryResult.ok ? bookingHistoryResult.data : [];
+    state.adminKitBookingHistory = kitHistoryResult.ok ? kitHistoryResult.data : [];
+    state.adminHistoryLoadError = !bookingHistoryResult.ok
+      ? bookingHistoryResult.error
+      : !kitHistoryResult.ok
+        ? kitHistoryResult.error
+        : null;
     state.adminLoadError = null;
     state.adminDataLoaded = true;
     renderAdminDashboard();
@@ -2324,20 +2422,47 @@ async function loadAdminData() {
 
 async function loadAdminWaitlistOverview() {
   if (!elements.adminWaitlistTbody) return;
-  elements.adminWaitlistTbody.innerHTML = `
-    <tr><td colspan="5" style="text-align: center; padding: 1.5rem;">Loading waitlist updates…</td></tr>`;
+  if (!state.adminWaitlistLoaded) {
+    elements.adminWaitlistCountBadge.textContent = 'Loading…';
+    elements.adminWaitlistTbody.innerHTML = `
+      <tr class="admin-loading-row"><td colspan="5"><span class="spinner spinner-sm" aria-hidden="true"></span> Loading waitlist updates…</td></tr>`;
+  }
   try {
     state.adminWaitlistOverview = await api.getAdminWaitlistOverview();
+    state.adminWaitlistLoaded = true;
+    state.adminWaitlistLoadError = null;
     renderAdminWaitlistOverview();
+    if (state.adminDataLoaded && !state.adminLoadError) renderAdminOverview();
   } catch (err) {
+    state.adminWaitlistLoaded = true;
+    state.adminWaitlistLoadError = err;
     renderTableState(
       elements.adminWaitlistTbody,
       5,
       'Waitlist activity is unavailable.',
-      err.message,
+      'Try again to refresh the slot and offer summary.',
       () => loadAdminWaitlistOverview()
     );
+    elements.adminWaitlistCountBadge.textContent = 'Unavailable';
+    if (state.adminDataLoaded && !state.adminLoadError) renderAdminOverview();
   }
+}
+
+function renderAdminLoadingStates() {
+  const loadingRow = (colspan, label) => `
+    <tr class="admin-loading-row"><td colspan="${colspan}"><span class="spinner spinner-sm" aria-hidden="true"></span> ${escapeHtml(label)}</td></tr>`;
+  elements.adminBookingsTbody.innerHTML = loadingRow(7, 'Loading booking requests…');
+  elements.adminReservationsTbody.innerHTML = loadingRow(7, 'Loading reservations…');
+  elements.adminResourcesTbody.innerHTML = loadingRow(7, 'Loading resources…');
+  elements.adminIssuesTbody.innerHTML = loadingRow(7, 'Loading issues…');
+  elements.adminKitCatalogue.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading Project Kits…</span></div>';
+  elements.adminNeedsAttentionList.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading actions…</span></div>';
+  elements.adminUpcomingReservationsList.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading reservations…</span></div>';
+  elements.adminResourceHealthList.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading resource health…</span></div>';
+  [elements.statPendingBookings, elements.statApprovedBookings, elements.statTotalResources,
+    elements.statMaintenanceResources, elements.statOpenIssues].forEach((element) => {
+    element.textContent = '—';
+  });
 }
 
 function updateMetrics() {
@@ -3300,14 +3425,15 @@ async function handleLeaveWaitlist(item) {
 function renderAdminDashboard() {
   if (state.adminLoadError) {
     const retry = () => loadAdminData();
-    renderTableState(elements.adminBookingsTbody, 6, 'Booking data is unavailable.', 'Try again to refresh the approval queue.', retry);
-    renderTableState(elements.adminReservationsTbody, 5, 'Reservation data is unavailable.', 'Try again to refresh current reservations.', retry);
-    renderTableState(elements.adminResourcesTbody, 6, 'Resource data is unavailable.', 'Try again to refresh the inventory.', retry);
+    renderTableState(elements.adminBookingsTbody, 7, 'Booking data is unavailable.', 'Try again to refresh the approval queue.', retry);
+    renderTableState(elements.adminReservationsTbody, 7, 'Reservation data is unavailable.', 'Try again to refresh current reservations.', retry);
+    renderAdminResourcesTable();
     renderTableState(elements.adminIssuesTbody, 7, 'Issue data is unavailable.', 'Try again to refresh maintenance work.', retry);
-    renderErrorState(elements.adminKitCatalogue, 'Project Kit catalogue is unavailable.', 'Retry to refresh the catalogue.', retry, { compact: true });
+    renderAdminKitManagement();
     elements.adminKitRequestsLink.hidden = true;
     renderErrorState(elements.adminNeedsAttentionList, 'Overview data is unavailable.', 'Retry to refresh actionable work.', retry, { compact: true });
     renderErrorState(elements.adminUpcomingReservationsList, 'Reservations are unavailable.', 'Retry to refresh the reservation preview.', retry, { compact: true });
+    renderErrorState(elements.adminResourceHealthList, 'Resource health is unavailable.', 'Retry to refresh resource status.', retry, { compact: true });
     updateActionBadge(elements.adminPendingCount, 0);
     updateActionBadge(elements.adminIssuesCount, 0);
     return;
@@ -3344,10 +3470,20 @@ function renderAdminOverview() {
   const pendingItems = getAdminReservationItems().filter((item) => item.data.status === 'PENDING');
   const pendingBookings = pendingItems.filter((item) => item.kind === 'BOOKING').length;
   const pendingKits = pendingItems.filter((item) => item.kind === 'KIT').length;
-  const maintenance = state.resourcesLoaded && !state.resourceLoadError
-    ? state.resources.filter((resource) => resource.status === 'MAINTENANCE').length
+  const resourceCounts = state.resourcesLoaded && !state.resourceLoadError
+    ? {
+      operational: state.resources.filter((resource) => resource.status === 'AVAILABLE').length,
+      maintenance: state.resources.filter((resource) => resource.status === 'MAINTENANCE').length
+    }
+    : null;
+  const maintenance = resourceCounts?.maintenance ?? null;
+  const affectedKits = state.kitsLoaded && !state.kitLoadError
+    ? state.kits.filter((kit) => !kitIsReady(kit)).length
     : null;
   const actionableIssues = state.adminIssues.filter(isActionableAdminIssue).length;
+  const activeOffers = state.adminWaitlistLoaded && !state.adminWaitlistLoadError
+    ? state.adminWaitlistOverview.filter((slot) => slot.activeOffer).length
+    : null;
   const attentionItems = [
     {
       title: 'Resource booking requests',
@@ -3382,13 +3518,34 @@ function renderAdminOverview() {
         ? `${actionableIssues} issue${actionableIssues === 1 ? '' : 's'} awaiting review or resolution.`
         : 'No issues are awaiting review or resolution.',
       route: 'admin-issues'
+    },
+    {
+      title: 'Project Kits affected by maintenance',
+      count: affectedKits,
+      detail: affectedKits === null
+        ? state.kitLoadError ? 'Project Kit readiness is temporarily unavailable.' : 'Project Kit readiness is still loading.'
+        : affectedKits
+          ? `${affectedKits} Kit${affectedKits === 1 ? '' : 's'} need an operational resource restored.`
+          : 'All Project Kits are ready to book.',
+      route: 'admin-kits'
+    },
+    {
+      title: 'Active Waitlist offers',
+      count: activeOffers,
+      detail: activeOffers === null
+        ? state.adminWaitlistLoadError ? 'Waitlist context is temporarily unavailable.' : 'Waitlist context is still loading.'
+        : activeOffers
+          ? `${activeOffers} exact-slot offer${activeOffers === 1 ? '' : 's'} awaiting Student acceptance.`
+          : 'No active slot offers.',
+      route: 'admin-overview',
+      target: 'adminWaitlistSection'
     }
   ];
 
   elements.adminNeedsAttentionList.innerHTML = `
     <div class="admin-attention-list">
       ${attentionItems.map((item) => `
-        <button type="button" class="admin-attention-link" data-nav-to-admin="${item.route}">
+        <button type="button" class="admin-attention-link" data-nav-to-admin="${item.route}"${item.target ? ` data-admin-target="${item.target}"` : ''}>
           <span class="admin-attention-copy">
             <strong>${escapeHtml(item.title)}</strong>
             <small>${escapeHtml(item.detail)}</small>
@@ -3402,32 +3559,43 @@ function renderAdminOverview() {
     .filter((item) => ['APPROVED', 'CONFIRMED'].includes(item.data.status))
     .slice(0, 3);
   if (upcomingReservations.length === 0) {
-    elements.adminUpcomingReservationsList.innerHTML = '<p class="admin-overview-empty">No upcoming or current approved reservations.</p>';
-    return;
+    elements.adminUpcomingReservationsList.innerHTML = '<p class="admin-overview-empty">No upcoming or active confirmed reservations.</p>';
+  } else {
+    elements.adminUpcomingReservationsList.innerHTML = `
+      <div class="admin-upcoming-list">
+        ${upcomingReservations.map((item) => {
+          const record = item.data;
+          const isKit = item.kind === 'KIT';
+          const title = isKit ? (record.kitName || 'Project Kit') : (record.resourceName || 'Resource reservation');
+          const reference = isKit ? (record.bookingReference || `Kit #${record.id}`) : `Booking #${record.bookingId}`;
+          const owner = isKit ? record.ownerName : record.username;
+          const status = getBookingDisplayStatus(record);
+          const active = new Date(record.startTime).getTime() <= Date.now();
+          return `
+            <button type="button" class="admin-upcoming-link" data-nav-to-admin="admin-reservations" aria-label="View reservation for ${escapeHtml(title)}">
+              <span class="admin-upcoming-main">
+                <strong>${escapeHtml(title)}</strong>
+                <small>${escapeHtml(reference)}${owner ? ` · ${escapeHtml(owner)}` : ''}</small>
+              </span>
+              <span class="admin-upcoming-meta">
+                <time>${active ? 'In progress' : escapeHtml(formatDateTime(record.startTime))}</time>
+                <span class="status-pill ${escapeHtml(record.status)}">${escapeHtml(status)}</span>
+              </span>
+            </button>`;
+        }).join('')}
+      </div>`;
   }
 
-  elements.adminUpcomingReservationsList.innerHTML = `
-    <div class="admin-upcoming-list">
-      ${upcomingReservations.map((item) => {
-        const record = item.data;
-        const isKit = item.kind === 'KIT';
-        const title = isKit ? (record.kitName || 'Project Kit') : (record.resourceName || 'Resource reservation');
-        const reference = isKit ? (record.bookingReference || `Kit #${record.id}`) : `Booking #${record.bookingId}`;
-        const owner = isKit ? record.ownerName : record.username;
-        const status = getBookingDisplayStatus(record);
-        return `
-          <button type="button" class="admin-upcoming-link" data-nav-to-admin="admin-reservations" aria-label="View reservation for ${escapeHtml(title)}">
-            <span class="admin-upcoming-main">
-              <strong>${escapeHtml(title)}</strong>
-              <small>${escapeHtml(reference)}${owner ? ` · ${escapeHtml(owner)}` : ''}</small>
-            </span>
-            <span class="admin-upcoming-meta">
-              <time>${escapeHtml(formatDateTime(record.startTime))}</time>
-              <span class="status-pill ${escapeHtml(record.status)}">${escapeHtml(status)}</span>
-            </span>
-          </button>`;
-      }).join('')}
-    </div>`;
+  const resourceHealth = resourceCounts
+    ? `<div class="admin-health-list">
+        <button type="button" class="admin-health-link" data-nav-to-admin="admin-resources"><span>Operational resources</span><strong>${resourceCounts.operational}</strong></button>
+        <button type="button" class="admin-health-link" data-nav-to-admin="admin-resources"><span>In maintenance</span><strong>${resourceCounts.maintenance}</strong></button>
+        <button type="button" class="admin-health-link" data-nav-to-admin="admin-kits"><span>Kits not ready</span><strong>${affectedKits === null ? '—' : affectedKits}</strong></button>
+      </div>`
+    : !state.resourcesLoaded
+      ? '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading resource health…</span></div>'
+      : '<p class="admin-overview-empty">Resource status is temporarily unavailable.</p>';
+  elements.adminResourceHealthList.innerHTML = resourceHealth;
 }
 
 function renderAdminWaitlistOverview() {
@@ -3450,11 +3618,11 @@ function renderAdminWaitlistOverview() {
       ? `<span class="status-pill OFFERED">${getWaitlistStatusLabel('OFFERED')}</span>`
       : `<span class="status-pill WAITING">${getWaitlistStatusLabel('WAITING')}</span>`;
     tr.innerHTML = `
-      <td><strong>${escapeHtml(slot.resourceName)}</strong></td>
-      <td>${formatDateTime(slot.requestedStart)} &rarr; ${formatDateTime(slot.requestedEnd)}</td>
-      <td>${statusText}</td>
-      <td>${slot.waitingCount} waiting</td>
-      <td>${slot.activeOffer ? formatDateTime(slot.offerExpiresAt) : '—'}</td>`;
+      <td data-label="Resource"><strong>${escapeHtml(slot.resourceName)}</strong></td>
+      <td data-label="Requested slot">${escapeHtml(formatDateTime(slot.requestedStart))} &rarr; ${escapeHtml(formatDateTime(slot.requestedEnd))}</td>
+      <td data-label="Status">${statusText}</td>
+      <td data-label="Queue">${Number(slot.waitingCount) || 0} waiting</td>
+      <td data-label="Offer expires">${slot.activeOffer ? escapeHtml(formatDateTime(slot.offerExpiresAt)) : '—'}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -3468,9 +3636,7 @@ function renderAdminBookingsTable() {
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align: center; color: var(--slate-500); padding: 2rem;">
-          No bookings are awaiting a decision.
-        </td>
+        <td colspan="7" class="table-empty-state">No booking requests need review.</td>
       </tr>
     `;
     return;
@@ -3484,44 +3650,45 @@ function renderAdminBookingsTable() {
 
     const booking = item.data;
     const tr = document.createElement('tr');
-
-    const isPending = booking.status === 'PENDING';
-    const displayStatus = getBookingDisplayStatus(booking);
+    const members = Array.isArray(booking.groupMemberNames) ? booking.groupMemberNames : [];
+    const resource = state.resources.find((entry) => Number(entry.id) === Number(booking.resourceId));
+    const capacity = resource?.capacity;
+    const location = booking.resourceLocation || resource?.location;
+    const type = getResourceTypeLabel(booking.resourceType);
+    const groupHtml = members.length
+      ? `<small class="admin-record-meta">Group members: ${members.map((name) => escapeHtml(name)).join(', ')}</small>`
+      : '';
 
     tr.innerHTML = `
-      <td><strong>#${booking.bookingId}</strong></td>
-      <td>
-        <span style="font-weight: 600;">${escapeHtml(booking.username)}</span>
-        <span style="color: var(--slate-400); font-size: 0.75rem;">(ID: ${booking.userId})</span>
+      <td data-label="Reference"><strong>#${escapeHtml(booking.bookingId)}</strong></td>
+      <td data-label="Student and group"><strong>${escapeHtml(booking.username || 'Unknown student')}</strong>${groupHtml}</td>
+      <td data-label="Resource or Project Kit">
+        <strong>${escapeHtml(booking.resourceName || 'Resource')}</strong>
+        <small class="admin-record-meta">Resource booking · ${escapeHtml(type)}</small>
       </td>
-      <td>
-        <span>${escapeHtml(booking.resourceName)}</span>
-        <span class="type-badge ${booking.resourceType}" style="font-size: 0.65rem; margin-left: 0.25rem;">${escapeHtml(getResourceTypeLabel(booking.resourceType))}</span>
+      <td data-label="Requested date and time">
+        <strong>${escapeHtml(formatDateTime(booking.startTime))}</strong>
+        <small class="admin-record-meta">Until ${escapeHtml(formatDateTime(booking.endTime))}</small>
       </td>
-      <td style="font-size: 0.8rem; color: var(--slate-600);">
-        ${formatDateTime(booking.startTime)} &rarr; ${formatDateTime(booking.endTime)}
+      <td data-label="Location or Kit contents">
+        <span>${escapeHtml(location || (booking.resourceType === 'EQUIPMENT' ? 'Pickup location not listed' : 'Location not listed'))}</span>
+        ${capacity != null ? `<small class="admin-record-meta">Capacity ${escapeHtml(capacity)}</small>` : ''}
       </td>
-      <td>
-        <span class="status-pill ${booking.status}">${escapeHtml(displayStatus)}</span>
-      </td>
-      <td style="text-align: right;">
-        ${isPending
-          ? `<div style="display: inline-flex; gap: 0.4rem;">
-               <button class="btn btn-success btn-sm admin-approve-btn" data-id="${booking.bookingId}"><span>✅ Approve</span></button>
-               <button class="btn btn-danger btn-sm admin-reject-btn" data-id="${booking.bookingId}"><span>❌ Reject</span></button>
-             </div>`
-          : '<span style="color: var(--slate-500); font-size: 0.8rem; font-weight: 600;">Decision complete</span>'}
+      <td data-label="Status"><span class="status-pill ${escapeHtml(booking.status)}">${escapeHtml(getBookingDisplayStatus(booking))}</span></td>
+      <td data-label="Action">
+        <div class="admin-row-actions">
+          <button type="button" class="btn btn-success btn-sm admin-approve-btn" aria-label="Approve booking ${escapeHtml(booking.bookingId)}">Approve</button>
+          <button type="button" class="btn btn-danger btn-sm admin-reject-btn" aria-label="Reject booking ${escapeHtml(booking.bookingId)}">Reject</button>
+        </div>
       </td>
     `;
 
-    if (isPending) {
-      tr.querySelector('.admin-approve-btn').addEventListener('click', () =>
-        handleAdminApprove(booking.bookingId)
-      );
-      tr.querySelector('.admin-reject-btn').addEventListener('click', () =>
-        handleAdminReject(booking.bookingId)
-      );
-    }
+    tr.querySelector('.admin-approve-btn').addEventListener('click', (event) =>
+      handleAdminApprove(booking.bookingId, event.currentTarget)
+    );
+    tr.querySelector('.admin-reject-btn').addEventListener('click', (event) =>
+      handleAdminReject(booking.bookingId, event.currentTarget)
+    );
 
     tbody.appendChild(tr);
   });
@@ -3537,13 +3704,38 @@ function renderAdminReservationRow(tbody, item, isHistory = false) {
   const name = isKit ? (booking.kitName || 'Project Kit') : booking.resourceName;
   const type = isKit ? 'Project Kit' : getResourceTypeLabel(booking.resourceType);
   const status = getBookingDisplayStatus(booking, isHistory);
+  const members = Array.isArray(booking.groupMemberNames) ? booking.groupMemberNames : [];
+  const groupHtml = members.length
+    ? `<small class="admin-record-meta">Group members: ${members.map((member) => escapeHtml(member)).join(', ')}</small>`
+    : '';
+  const resource = isKit ? null : state.resources.find((entry) => Number(entry.id) === Number(booking.resourceId));
+  const locationHtml = isKit
+    ? `<details class="admin-kit-resources"><summary>${Number(booking.resourceCount) || (booking.includedResources || []).length} included resources</summary><ul>${(booking.includedResources || []).map((item) => {
+      const location = item.location || 'Location not listed';
+      const capacity = item.capacity == null ? '' : ` · Capacity ${escapeHtml(item.capacity)}`;
+      return `<li><span>${escapeHtml(item.name)}<small class="admin-record-meta">${escapeHtml(getResourceTypeLabel(item.type || 'RESOURCE'))} · ${escapeHtml(location)}${capacity}</small></span></li>`;
+    }).join('')}</ul></details>`
+    : `<span>${escapeHtml(booking.resourceLocation || resource?.location || (booking.resourceType === 'EQUIPMENT' ? 'Pickup location not listed' : 'Location not listed'))}</span>${resource?.capacity == null ? '' : `<small class="admin-record-meta">Capacity ${escapeHtml(resource.capacity)}</small>`}`;
+  const canCancel = !isHistory
+    && ['APPROVED', 'CONFIRMED'].includes(booking.status)
+    && new Date(booking.startTime).getTime() > Date.now();
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><strong>${escapeHtml(reference)}</strong></td>
-    <td>${escapeHtml(username || 'Unknown user')}</td>
-    <td><span>${escapeHtml(name || 'Reservation')}</span><span class="type-badge ${isKit ? 'KIT' : escapeHtml(booking.resourceType)}">${escapeHtml(type)}</span></td>
-    <td>${formatDateTime(booking.startTime)} &rarr; ${formatDateTime(booking.endTime)}</td>
-    <td><span class="status-pill ${escapeHtml(booking.status)}">${escapeHtml(status)}</span></td>`;
+    <td data-label="Reference"><strong>${escapeHtml(reference)}</strong></td>
+    <td data-label="Student and group"><strong>${escapeHtml(username || 'Unknown student')}</strong>${groupHtml}</td>
+    <td data-label="Reservation"><strong>${escapeHtml(name || 'Reservation')}</strong><small class="admin-record-meta">${escapeHtml(type)}</small></td>
+    <td data-label="Date and time"><strong>${escapeHtml(formatDateTime(booking.startTime))}</strong><small class="admin-record-meta">Until ${escapeHtml(formatDateTime(booking.endTime))}</small></td>
+    <td data-label="Location or included resources">${locationHtml}</td>
+    <td data-label="Status"><span class="status-pill ${escapeHtml(booking.status)}">${escapeHtml(status)}</span></td>
+    <td data-label="Action">${canCancel
+      ? `<button type="button" class="btn btn-danger btn-sm admin-cancel-reservation-btn" aria-label="Cancel reservation ${escapeHtml(reference)}">Cancel reservation</button>`
+      : isHistory ? '<span class="admin-record-meta">—</span>' : '<span class="admin-record-meta">No action available</span>'}</td>`;
+  const cancelButton = tr.querySelector('.admin-cancel-reservation-btn');
+  if (cancelButton) {
+    cancelButton.addEventListener('click', (event) =>
+      handleAdminCancelReservation(item, event.currentTarget)
+    );
+  }
   tbody.appendChild(tr);
 }
 
@@ -3553,20 +3745,21 @@ function renderAdminReservationsTable() {
   const current = getAdminReservationItems().filter((item) =>
     ['APPROVED', 'CONFIRMED'].includes(item.data.status)
   );
-  const history = state.adminBookingHistory
-    .map((booking) => ({ kind: 'BOOKING', data: booking }))
-    .sort((a, b) => new Date(b.data.startTime).getTime() - new Date(a.data.startTime).getTime());
+  const history = [
+    ...state.adminBookingHistory.map((booking) => ({ kind: 'BOOKING', data: booking })),
+    ...state.adminKitBookingHistory.map((booking) => ({ kind: 'KIT', data: booking }))
+  ].sort((a, b) => new Date(b.data.startTime).getTime() - new Date(a.data.startTime).getTime());
   elements.adminReservationsCountBadge.textContent = `${current.length + history.length} ${current.length + history.length === 1 ? 'reservation' : 'reservations'}`;
 
   if (current.length === 0 && history.length === 0 && !state.adminHistoryLoadError) {
-    tbody.innerHTML = '<tr><td colspan="5" class="table-empty-state">No approved or current reservations, or booking history.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="table-empty-state">No upcoming reservations or booking history.</td></tr>';
     return;
   }
 
   if (current.length > 0) {
     const heading = document.createElement('tr');
     heading.className = 'table-section-row';
-    heading.innerHTML = '<th colspan="5" scope="colgroup">Current reservations</th>';
+    heading.innerHTML = '<th colspan="7" scope="colgroup">Upcoming and active reservations</th>';
     tbody.appendChild(heading);
     current.forEach((item) => renderAdminReservationRow(tbody, item));
   }
@@ -3574,14 +3767,14 @@ function renderAdminReservationsTable() {
   if (history.length > 0) {
     const heading = document.createElement('tr');
     heading.className = 'table-section-row';
-    heading.innerHTML = '<th colspan="5" scope="colgroup">Booking history</th>';
+    heading.innerHTML = '<th colspan="7" scope="colgroup">History</th>';
     tbody.appendChild(heading);
     history.forEach((item) => renderAdminReservationRow(tbody, item, true));
   }
 
   if (state.adminHistoryLoadError) {
     const row = document.createElement('tr');
-    row.innerHTML = '<td colspan="5"><div class="table-inline-error"><span>Booking history could not be loaded.</span><button type="button" class="btn btn-secondary btn-sm">Retry</button></div></td>';
+    row.innerHTML = '<td colspan="7"><div class="table-inline-error"><span>Some reservation history could not be loaded.</span><button type="button" class="btn btn-secondary btn-sm">Retry</button></div></td>';
     row.querySelector('button').addEventListener('click', () => loadAdminData());
     tbody.appendChild(row);
   }
@@ -3590,7 +3783,9 @@ function renderAdminReservationsTable() {
 function renderAdminKitManagement() {
   const catalogue = elements.adminKitCatalogue;
   catalogue.innerHTML = '';
-  elements.adminKitCountBadge.textContent = `${state.kits.length} ${state.kits.length === 1 ? 'kit' : 'kits'}`;
+  elements.adminKitCountBadge.textContent = state.kitsLoaded
+    ? `${state.kits.length} ${state.kits.length === 1 ? 'kit' : 'kits'}`
+    : 'Loading…';
   const pendingKitRequests = getAdminReservationItems().filter((item) =>
     item.kind === 'KIT' && item.data.status === 'PENDING'
   ).length;
@@ -3601,7 +3796,9 @@ function renderAdminKitManagement() {
     elements.adminKitRequestsLink.setAttribute('aria-label', label);
   }
 
-  if (state.kitLoadError && state.kits.length === 0) {
+  if (!state.kitsLoaded) {
+    catalogue.innerHTML = '<div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading Project Kits…</span></div>';
+  } else if (state.kitLoadError && state.kits.length === 0) {
     renderErrorState(catalogue, 'Project Kit inventory is unavailable.', 'Try again to reload the kit catalogue.', () => loadKits(), { compact: true });
   } else if (state.kits.length === 0) {
     catalogue.innerHTML = '<div class="empty-state"><p class="state-title">No Project Kits in the catalogue.</p><p>Kits will appear here when they are configured for booking.</p></div>';
@@ -3630,67 +3827,71 @@ function renderAdminKitManagement() {
 
 function renderAdminKitBookingRow(tbody, kitBooking) {
   const tr = document.createElement('tr');
-  const isPending = kitBooking.status === 'PENDING';
   const resources = Array.isArray(kitBooking.includedResources)
     ? kitBooking.includedResources
     : [];
   const resourceCount = Number(kitBooking.resourceCount) || resources.length;
   const resourceListHtml = resources.length > 0
-     ? resources.map((resource) => `<li>${escapeHtml(resource.name)} <span class="type-badge ${escapeHtml(resource.type || 'KIT')}">${escapeHtml(getResourceTypeLabel(resource.type || 'RESOURCE'))}</span></li>`).join('')
+     ? resources.map((resource) => {
+       const location = resource.location || 'Location not listed';
+       const capacity = resource.capacity == null ? '' : ` · Capacity ${escapeHtml(resource.capacity)}`;
+       return `<li><span>${escapeHtml(resource.name)}<small class="admin-record-meta">${escapeHtml(getResourceTypeLabel(resource.type || 'RESOURCE'))} · ${escapeHtml(location)}${capacity}</small></span></li>`;
+     }).join('')
     : '<li>Resource details unavailable</li>';
   const members = Array.isArray(kitBooking.groupMemberNames) ? kitBooking.groupMemberNames : [];
   const groupHtml = members.length > 0
-    ? `<div class="admin-kit-members">👥 ${members.map((name) => escapeHtml(name)).join(', ')}</div>`
+    ? `<small class="admin-record-meta">Group members: ${members.map((name) => escapeHtml(name)).join(', ')}</small>`
     : '';
 
   tr.className = 'admin-kit-row';
   tr.innerHTML = `
-    <td>
-      <strong class="kit-booking-reference">${escapeHtml(kitBooking.bookingReference || `Kit #${kitBooking.id}`)}</strong>
-      <span class="type-badge KIT admin-record-badge">Project Kit</span>
-    </td>
-    <td>
-      <span style="font-weight: 600;">${escapeHtml(kitBooking.ownerName || 'Unknown owner')}</span>
-      <span style="color: var(--slate-400); font-size: 0.75rem;">(ID: ${kitBooking.ownerId})</span>
-      ${groupHtml}
-    </td>
-    <td>
+    <td data-label="Reference"><strong class="kit-booking-reference">${escapeHtml(kitBooking.bookingReference || `Kit #${kitBooking.id}`)}</strong></td>
+    <td data-label="Student and group"><strong>${escapeHtml(kitBooking.ownerName || 'Unknown student')}</strong>${groupHtml}</td>
+    <td data-label="Resource or Project Kit">
       <strong>${escapeHtml(kitBooking.kitName || 'Project Kit')}</strong>
+      <small class="admin-record-meta">Project Kit reservation · ${resourceCount} included resource${resourceCount === 1 ? '' : 's'}</small>
       <details class="admin-kit-resources">
-        <summary>${resourceCount} included resource${resourceCount === 1 ? '' : 's'}</summary>
+        <summary>Review included resources</summary>
         <ul>${resourceListHtml}</ul>
       </details>
     </td>
-    <td style="font-size: 0.8rem; color: var(--slate-600);">
-      ${formatDateTime(kitBooking.startTime)} &rarr; ${formatDateTime(kitBooking.endTime)}
+    <td data-label="Requested date and time">
+      <strong>${escapeHtml(formatDateTime(kitBooking.startTime))}</strong>
+      <small class="admin-record-meta">Until ${escapeHtml(formatDateTime(kitBooking.endTime))}</small>
     </td>
-    <td>
+    <td data-label="Location or Kit contents">See included resources for their locations.</td>
+    <td data-label="Status">
       <span class="status-pill ${escapeHtml(kitBooking.status)}">${escapeHtml(getBookingDisplayStatus(kitBooking))}</span>
     </td>
-    <td style="text-align: right;">
-      ${isPending
-        ? `<div style="display: inline-flex; gap: 0.4rem;">
-             <button class="btn btn-success btn-sm admin-kit-approve-btn" type="button"><span>✅ Approve Kit</span></button>
-             <button class="btn btn-danger btn-sm admin-kit-reject-btn" type="button"><span>❌ Reject Kit</span></button>
-           </div>`
-        : '<span style="color: var(--slate-500); font-size: 0.8rem; font-weight: 600;">Decision complete</span>'}
+    <td data-label="Action">
+      <div class="admin-row-actions">
+        <button class="btn btn-success btn-sm admin-kit-approve-btn" type="button" aria-label="Approve ${escapeHtml(kitBooking.kitName || 'Project Kit')} request">Approve Kit</button>
+        <button class="btn btn-danger btn-sm admin-kit-reject-btn" type="button" aria-label="Reject ${escapeHtml(kitBooking.kitName || 'Project Kit')} request">Reject Kit</button>
+      </div>
     </td>
   `;
 
-  if (isPending) {
-    tr.querySelector('.admin-kit-approve-btn').addEventListener('click', () =>
-      handleAdminApproveKit(kitBooking)
-    );
-    tr.querySelector('.admin-kit-reject-btn').addEventListener('click', () =>
-      handleAdminRejectKit(kitBooking)
-    );
-  }
+  tr.querySelector('.admin-kit-approve-btn').addEventListener('click', (event) =>
+    handleAdminApproveKit(kitBooking, event.currentTarget)
+  );
+  tr.querySelector('.admin-kit-reject-btn').addEventListener('click', (event) =>
+    handleAdminRejectKit(kitBooking, event.currentTarget)
+  );
   tbody.appendChild(tr);
 }
 
 function renderAdminResourcesTable() {
   const tbody = elements.adminResourcesTbody;
   tbody.innerHTML = '';
+
+  if (state.resourceLoadError) {
+    renderTableState(tbody, 7, 'Resource inventory is unavailable.', 'Try again to reload campus resources.', () => loadResources());
+    return;
+  }
+  if (!state.resourcesLoaded) {
+    tbody.innerHTML = '<tr class="admin-loading-row"><td colspan="7"><span class="spinner spinner-sm" aria-hidden="true"></span> Loading resources…</td></tr>';
+    return;
+  }
 
   if (state.resources.length === 0) {
     renderTableState(tbody, 7, 'No resources in the catalogue.', 'Add a room, lab, or piece of equipment to get started.');
@@ -3701,26 +3902,29 @@ function renderAdminResourcesTable() {
     const tr = document.createElement('tr');
 
     const isAvailable = resource.status === 'AVAILABLE';
+    const maintenanceAction = isAvailable ? 'Mark as maintenance'
+      : resource.status === 'MAINTENANCE' ? 'Return to operational' : 'Set operational';
+    const locationLabel = resource.type === 'EQUIPMENT' ? 'Pickup location' : 'Location';
 
     tr.innerHTML = `
-      <td><strong>#${resource.id}</strong></td>
-      <td><span style="font-weight: 700; color: var(--slate-900);">${escapeHtml(resource.name)}</span></td>
-      <td><span class="type-badge ${resource.type}">${escapeHtml(getResourceTypeLabel(resource.type))}</span></td>
-      <td style="max-width: 240px; color: var(--slate-600); font-size: 0.825rem;">${escapeHtml(resource.location || '—')}</td>
-      <td>${resource.capacity == null ? '—' : escapeHtml(resource.capacity)}</td>
-      <td>
+      <td data-label="ID"><strong>#${escapeHtml(resource.id)}</strong></td>
+      <td data-label="Resource"><strong>${escapeHtml(resource.name)}</strong></td>
+      <td data-label="Type"><span class="type-badge ${escapeHtml(resource.type)}">${escapeHtml(getResourceTypeLabel(resource.type))}</span></td>
+      <td data-label="${locationLabel}">${escapeHtml(resource.location || 'Not listed')}</td>
+      <td data-label="Capacity">${resource.capacity == null ? '—' : escapeHtml(resource.capacity)}</td>
+      <td data-label="Status">
         <span class="status-badge ${resource.status}">
           <span class="dot"></span>
           <span>${escapeHtml(getResourceStatusLabel(resource.status))}</span>
         </span>
       </td>
-      <td style="text-align: right;">
-        <div style="display: inline-flex; gap: 0.5rem;">
-          <button class="btn btn-secondary btn-sm toggle-status-btn" data-id="${resource.id}" data-status="${resource.status}" aria-label="${isAvailable ? 'Set ' : 'Make '}${escapeHtml(resource.name)} ${isAvailable ? 'for maintenance' : 'operational'}">
-            <span>${isAvailable ? '🔧 Set Maintenance' : '🟢 Set Operational'}</span>
+      <td data-label="Actions">
+        <div class="admin-row-actions">
+          <button type="button" class="btn btn-secondary btn-sm toggle-status-btn" aria-label="${maintenanceAction} for ${escapeHtml(resource.name)}">
+            <span>${maintenanceAction}</span>
           </button>
-          <button class="btn btn-danger btn-sm delete-resource-btn" data-id="${resource.id}" data-name="${escapeHtml(resource.name)}" aria-label="Delete ${escapeHtml(resource.name)}">
-            <span>🗑️ Delete</span>
+          <button type="button" class="btn btn-danger btn-sm delete-resource-btn" aria-label="Delete ${escapeHtml(resource.name)}">
+            <span>Delete</span>
           </button>
         </div>
       </td>
@@ -3728,7 +3932,7 @@ function renderAdminResourcesTable() {
 
     tr.querySelector('.toggle-status-btn').addEventListener('click', () => {
       const nextStatus = isAvailable ? 'MAINTENANCE' : 'AVAILABLE';
-      handleToggleResourceStatus(resource.id, nextStatus);
+      handleToggleResourceStatus(resource, nextStatus, tr.querySelector('.toggle-status-btn'));
     });
 
     tr.querySelector('.delete-resource-btn').addEventListener('click', () => {
@@ -3747,49 +3951,51 @@ function renderAdminIssuesTable() {
   elements.issuesCountBadge.textContent = `${pendingCount} awaiting review • ${openCount} in progress`;
 
   if (state.adminIssues.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="7" style="text-align: center; color: var(--slate-500); padding: 2rem;">
-          No resource issues have been reported.
-        </td>
-      </tr>
-    `;
+    tbody.innerHTML = '<tr><td colspan="7" class="table-empty-state">No open issues need attention. No issue reports have been submitted.</td></tr>';
     return;
   }
 
-  state.adminIssues.forEach((issue) => {
+  const orderedIssues = [...state.adminIssues].sort((a, b) => {
+    const aActionable = isActionableAdminIssue(a) ? 0 : 1;
+    const bActionable = isActionableAdminIssue(b) ? 0 : 1;
+    return aActionable - bActionable
+      || new Date(b.reportedTime).getTime() - new Date(a.reportedTime).getTime();
+  });
+  let previousGroup = null;
+  orderedIssues.forEach((issue) => {
+    const group = isActionableAdminIssue(issue) ? 'Open and in progress' : 'Closed reports';
+    if (group !== previousGroup) {
+      const heading = document.createElement('tr');
+      heading.className = 'table-section-row';
+      heading.innerHTML = `<th colspan="7" scope="colgroup">${group}</th>`;
+      tbody.appendChild(heading);
+      previousGroup = group;
+    }
     const tr = document.createElement('tr');
     const isPending = issue.status === 'PENDING';
     const isOpen = issue.status === 'OPEN';
     const actionHtml = isPending
-      ? `<div style="display: inline-flex; gap: 0.4rem;">
-           <button class="btn btn-success btn-sm approve-issue-btn" data-id="${issue.issueId}"><span>✅ Approve</span></button>
-           <button class="btn btn-danger btn-sm reject-issue-btn" data-id="${issue.issueId}"><span>❌ Reject</span></button>
-         </div>`
+      ? `<button type="button" class="btn btn-success btn-sm approve-issue-btn" aria-label="Approve issue ${escapeHtml(issue.issueId)}">Approve report</button>
+         <button type="button" class="btn btn-danger btn-sm reject-issue-btn" aria-label="Reject issue ${escapeHtml(issue.issueId)}">Reject report</button>`
       : isOpen
-        ? `<button class="btn btn-success btn-sm resolve-issue-btn" data-id="${issue.issueId}"><span>✅ Resolve</span></button>`
-        : '<span style="color: var(--slate-500); font-size: 0.8rem; font-weight: 600;">Closed</span>';
+        ? `<button type="button" class="btn btn-success btn-sm resolve-issue-btn" aria-label="Resolve issue ${escapeHtml(issue.issueId)}">Mark resolved</button>`
+        : '<span class="admin-record-meta">No action available</span>';
     tr.innerHTML = `
-      <td><strong>#${issue.issueId}</strong></td>
-      <td>
-        <span style="font-weight: 600;">${escapeHtml(issue.resourceName)}</span>
-        <span class="type-badge ${issue.resourceType}" style="font-size: 0.65rem; margin-left: 0.25rem;">${escapeHtml(getResourceTypeLabel(issue.resourceType))}</span>
-      </td>
-      <td>${escapeHtml(issue.reporterUsername)} <span style="color: var(--slate-400); font-size: 0.75rem;">(ID: ${issue.reporterUserId})</span></td>
-      <td style="max-width: 320px; color: var(--slate-600);">${escapeHtml(issue.description)}</td>
-      <td style="font-size: 0.8rem; color: var(--slate-600);">${formatDateTime(issue.reportedTime)}</td>
-      <td><span class="status-pill ${escapeHtml(issue.status)}">${escapeHtml(getIssueStatusLabel(issue.status))}</span></td>
-      <td style="text-align: right;">
-        ${actionHtml}
-      </td>
+      <td data-label="Issue"><strong>#${escapeHtml(issue.issueId)}</strong></td>
+      <td data-label="Resource"><strong>${escapeHtml(issue.resourceName)}</strong><small class="admin-record-meta">${escapeHtml(getResourceTypeLabel(issue.resourceType))}</small></td>
+      <td data-label="Student reporter">${escapeHtml(issue.reporterUsername)}</td>
+      <td data-label="Description" class="admin-issue-description">${escapeHtml(issue.description)}</td>
+      <td data-label="Reported">${escapeHtml(formatDateTime(issue.reportedTime))}</td>
+      <td data-label="Status"><span class="status-pill ${escapeHtml(issue.status)}">${escapeHtml(getIssueStatusLabel(issue.status))}</span></td>
+      <td data-label="Action"><div class="admin-row-actions">${actionHtml}</div></td>
     `;
 
     if (isPending) {
-      tr.querySelector('.approve-issue-btn').addEventListener('click', () => handleApproveIssue(issue));
-      tr.querySelector('.reject-issue-btn').addEventListener('click', () => handleRejectIssue(issue));
+      tr.querySelector('.approve-issue-btn').addEventListener('click', (event) => handleApproveIssue(issue, event.currentTarget));
+      tr.querySelector('.reject-issue-btn').addEventListener('click', (event) => handleRejectIssue(issue, event.currentTarget));
     }
     if (isOpen) {
-      tr.querySelector('.resolve-issue-btn').addEventListener('click', () => handleResolveIssue(issue));
+      tr.querySelector('.resolve-issue-btn').addEventListener('click', (event) => handleResolveIssue(issue, event.currentTarget));
     }
     tbody.appendChild(tr);
   });
@@ -4686,27 +4892,49 @@ async function handleIssueSubmit(e) {
   }
 }
 
-async function handleApproveIssue(issue) {
+function setAdminRowBusy(actionButton, busy) {
+  const row = actionButton?.closest('tr');
+  if (!row) return;
+  row.setAttribute('aria-busy', busy ? 'true' : 'false');
+  row.querySelectorAll('button').forEach((button) => {
+    if (busy) {
+      button.dataset.previousLabel = button.textContent;
+      button.disabled = true;
+    } else {
+      button.disabled = false;
+      if (button.dataset.previousLabel) {
+        button.textContent = button.dataset.previousLabel;
+        delete button.dataset.previousLabel;
+      }
+    }
+  });
+  if (busy && actionButton) actionButton.textContent = 'Saving…';
+}
+
+async function handleApproveIssue(issue, actionButton) {
   const confirmed = await showConfirmDialog({
     title: 'Approve this issue report?',
     message: `${issue.resourceName} will be placed into maintenance while the issue is investigated.`,
     confirmLabel: 'Approve issue',
     cancelLabel: 'Review later',
     tone: 'warning',
-    icon: '⚠'
+    icon: '!'
   });
   if (!confirmed) return;
 
+  setAdminRowBusy(actionButton, true);
   try {
     await api.approveIssue(issue.issueId);
-    showToast('Issue Approved', `${issue.resourceName} is now in maintenance.`, 'success');
+    setAdminFeedback(`Issue report approved. ${issue.resourceName} is in maintenance while it is investigated.`, 'success');
     await loadAllData();
   } catch (err) {
-    showToast('Approval Failed', err.message, 'error');
+    if (adminActionFailed(err, 'We could not update this issue. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
   }
 }
 
-async function handleRejectIssue(issue) {
+async function handleRejectIssue(issue, actionButton) {
   const confirmed = await showConfirmDialog({
     title: 'Reject this issue report?',
     message: `The report for ${issue.resourceName} will be closed without changing its maintenance status.`,
@@ -4716,19 +4944,22 @@ async function handleRejectIssue(issue) {
   });
   if (!confirmed) return;
 
+  setAdminRowBusy(actionButton, true);
   try {
     await api.rejectIssue(issue.issueId);
-    showToast('Issue Rejected', `Issue #${issue.issueId} was rejected; resource status was unchanged.`, 'info');
+    setAdminFeedback(`Issue report for ${issue.resourceName} was rejected. Resource status was unchanged.`, 'success');
     await loadAllData();
   } catch (err) {
-    showToast('Rejection Failed', err.message, 'error');
+    if (adminActionFailed(err, 'We could not update this issue. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
   }
 }
 
-async function handleResolveIssue(issue) {
+async function handleResolveIssue(issue, actionButton) {
   const confirmed = await showConfirmDialog({
     title: 'Mark this issue resolved?',
-    message: `This will close the issue report for ${issue.resourceName}.`,
+    message: `This closes the issue report. The resource may return to operational if no other open issue or manual maintenance remains.`,
     confirmLabel: 'Mark resolved',
     cancelLabel: 'Not yet',
     tone: 'primary',
@@ -4736,17 +4967,20 @@ async function handleResolveIssue(issue) {
   });
   if (!confirmed) return;
 
+  setAdminRowBusy(actionButton, true);
   try {
     await api.resolveIssue(issue.issueId);
-    showToast('Issue Resolved', `Issue #${issue.issueId} has been resolved.`, 'success');
+    setAdminFeedback(`Issue report for ${issue.resourceName} was marked resolved.`, 'success');
     await loadAllData();
   } catch (err) {
-    showToast('Resolution Failed', err.message, 'error');
+    if (adminActionFailed(err, 'We could not update this issue. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
   }
 }
 
 // Admin Approvals
-async function handleAdminApprove(bookingId) {
+async function handleAdminApprove(bookingId, actionButton) {
   const confirmed = await showConfirmDialog({
     title: 'Approve this booking?',
     message: `Booking #${bookingId} will become confirmed for the requested time.`,
@@ -4757,16 +4991,19 @@ async function handleAdminApprove(bookingId) {
   });
   if (!confirmed) return;
 
+  setAdminRowBusy(actionButton, true);
   try {
     await api.approveBooking(bookingId);
-    showToast('Booking approved', `Booking #${bookingId} is now confirmed.`, 'success');
+    setAdminFeedback(`Booking #${bookingId} is confirmed.`, 'success');
     await loadAllData();
   } catch (err) {
-    showToast('Error', err.message, 'error');
+    if (adminActionFailed(err, 'We could not update this booking request. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
   }
 }
 
-async function handleAdminReject(bookingId) {
+async function handleAdminReject(bookingId, actionButton) {
   const confirmed = await showConfirmDialog({
     title: 'Reject this booking?',
     message: `Booking #${bookingId} will be declined and its requested time released.`,
@@ -4776,16 +5013,19 @@ async function handleAdminReject(bookingId) {
   });
   if (!confirmed) return;
 
+  setAdminRowBusy(actionButton, true);
   try {
     await api.rejectBooking(bookingId);
-    showToast('Booking rejected', `Booking #${bookingId} was declined.`, 'warning');
+    setAdminFeedback(`Booking #${bookingId} was rejected. Its time was released for any eligible exact-slot Waitlist offer.`, 'success');
     await loadAllData();
   } catch (err) {
-    showToast('Error', err.message, 'error');
+    if (adminActionFailed(err, 'We could not update this booking request. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
   }
 }
 
-async function handleAdminApproveKit(kitBooking) {
+async function handleAdminApproveKit(kitBooking, actionButton) {
   const reference = kitBooking.bookingReference || `Kit #${kitBooking.id}`;
   const confirmed = await showConfirmDialog({
     title: 'Approve this Project Kit reservation?',
@@ -4797,38 +5037,80 @@ async function handleAdminApproveKit(kitBooking) {
   });
   if (!confirmed) return;
 
+  setAdminRowBusy(actionButton, true);
   try {
     await api.approveKitBooking(kitBooking.id);
-    showToast('Kit Approved', `${reference} has been approved as one reservation.`, 'success');
+    setAdminFeedback(`${reference} was confirmed as one Project Kit reservation.`, 'success');
     await loadAllData();
   } catch (err) {
-    showToast('Kit Approval Error', err.message, err.status === 409 ? 'warning' : 'error');
+    if (adminActionFailed(err, 'We could not update this Project Kit request. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
   }
 }
 
-async function handleAdminRejectKit(kitBooking) {
+async function handleAdminRejectKit(kitBooking, actionButton) {
   const reference = kitBooking.bookingReference || `Kit #${kitBooking.id}`;
   const confirmed = await showConfirmDialog({
     title: 'Reject this Project Kit reservation?',
-    message: `${reference} · ${kitBooking.kitName || 'Project Kit'} will be declined and its resources released.`,
+    message: `${reference} · ${kitBooking.kitName || 'Project Kit'} will be declined as one parent request. Its included resource slots will be released and may create exact-slot Waitlist offers.`,
     confirmLabel: 'Reject Project Kit',
     cancelLabel: 'Keep pending',
     tone: 'danger'
   });
   if (!confirmed) return;
 
+  setAdminRowBusy(actionButton, true);
   try {
     await api.rejectKitBooking(kitBooking.id);
-    showToast('Kit Rejected', `${reference} has been rejected and its resources were released.`, 'warning');
+    setAdminFeedback(`${reference} was rejected as one Project Kit request. Its resource slots were released.`, 'success');
     await loadAllData();
   } catch (err) {
-    showToast('Kit Rejection Error', err.message, err.status === 409 ? 'warning' : 'error');
+    if (adminActionFailed(err, 'We could not update this Project Kit request. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
+  }
+}
+
+async function handleAdminCancelReservation(item, actionButton) {
+  const isKit = item.kind === 'KIT';
+  const record = item.data;
+  const reference = isKit
+    ? (record.bookingReference || `Kit #${record.id}`)
+    : `Booking #${record.bookingId}`;
+  const name = isKit ? (record.kitName || 'Project Kit') : (record.resourceName || 'reservation');
+  const confirmed = await showConfirmDialog({
+    title: 'Cancel this reservation?',
+    message: isKit
+      ? `${reference} · ${name} will be cancelled as one parent reservation. Included resource slots will be released, and eligible exact-slot Waitlist offers may be made.`
+      : `${reference} · ${name} will be cancelled. Its time will be released, and an eligible exact-slot Waitlist offer may be made.`,
+    confirmLabel: 'Cancel reservation',
+    cancelLabel: 'Keep reservation',
+    tone: 'danger'
+  });
+  if (!confirmed) return;
+
+  setAdminRowBusy(actionButton, true);
+  try {
+    if (isKit) await api.cancelKitBooking(record.id);
+    else await api.cancelBooking(record.bookingId);
+    setAdminFeedback(`${reference} was cancelled. The released time is available for eligible exact-slot Waitlist offers.`, 'success');
+    await loadAllData();
+  } catch (err) {
+    if (adminActionFailed(err, 'We could not cancel this reservation. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
   }
 }
 
 // Admin Resource Management
 function openAddResourceModal() {
   elements.addResourceForm.reset();
+  elements.addResourceFormError.hidden = true;
+  elements.addResourceFormError.textContent = '';
+  setResourceFieldError(elements.newResourceName, elements.newResourceNameError, '');
+  setResourceFieldError(elements.newResourceCapacity, elements.newResourceCapacityError, '');
+  updateResourceCapacityVisibility();
   openManagedModal(elements.addResourceModalBackdrop, elements.newResourceName, closeAddResourceModal);
 }
 
@@ -4846,39 +5128,89 @@ async function handleAddResourceSubmit(e) {
   const location = elements.newResourceLocation.value.trim();
   const capacityText = elements.newResourceCapacity.value.trim();
 
+  setResourceFieldError(elements.newResourceName, elements.newResourceNameError, '');
+  setResourceFieldError(elements.newResourceCapacity, elements.newResourceCapacityError, '');
+  elements.addResourceFormError.hidden = true;
+  elements.addResourceFormError.textContent = '';
   if (!name) {
-    showToast('Validation Error', 'Resource name is required.', 'warning');
+    setResourceFieldError(elements.newResourceName, elements.newResourceNameError, 'Enter a resource name.');
+    elements.newResourceName.focus();
     return;
   }
 
-  const capacity = capacityText ? Number(capacityText) : null;
+  const capacity = type === 'EQUIPMENT' || !capacityText ? null : Number(capacityText);
   if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1)) {
-    showToast('Validation Error', 'Capacity must be a positive whole number.', 'warning');
+    setResourceFieldError(elements.newResourceCapacity, elements.newResourceCapacityError, 'Enter a positive whole number for capacity.');
     elements.newResourceCapacity.focus();
     return;
   }
 
   const payload = { name, type, status, description, location: location || null, capacity };
+  const submitButton = document.getElementById('submitAddResourceBtn');
+  submitButton.disabled = true;
+  submitButton.textContent = 'Adding…';
 
   try {
     await api.createResource(payload);
     closeAddResourceModal();
-    showToast('Resource created', `Added ${getResourceTypeLabel(type).toLowerCase()} "${name}".`, 'success');
-    await loadResources();
-    await loadAdminData();
+    setAdminFeedback(`${name} was added to the resource inventory.`, 'success');
+    await loadAllData();
   } catch (err) {
-    showToast('Creation Failed', err.message, 'error');
+    const message = err?.status === 409
+      ? 'A resource with this name or configuration already exists.'
+      : err?.status === 400
+        ? 'Check the resource details and capacity values, then try again.'
+        : getAdminErrorMessage(err, 'We could not add this resource. Try again.');
+    elements.addResourceFormError.textContent = message;
+    elements.addResourceFormError.hidden = false;
+    if (err?.status === 409) {
+      setResourceFieldError(elements.newResourceName, elements.newResourceNameError, 'Choose a different resource name.');
+      elements.newResourceName.focus();
+    }
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = 'Add resource';
   }
 }
 
-async function handleToggleResourceStatus(resourceId, newStatus) {
+function setResourceFieldError(input, errorElement, message) {
+  if (!input || !errorElement) return;
+  errorElement.textContent = message;
+  errorElement.hidden = !message;
+  input.setAttribute('aria-invalid', message ? 'true' : 'false');
+}
+
+function updateResourceCapacityVisibility() {
+  const isEquipment = elements.newResourceType.value === 'EQUIPMENT';
+  elements.newResourceCapacityGroup.hidden = isEquipment;
+  elements.newResourceCapacity.disabled = isEquipment;
+  if (isEquipment) elements.newResourceCapacity.value = '';
+  setResourceFieldError(elements.newResourceCapacity, elements.newResourceCapacityError, '');
+}
+
+async function handleToggleResourceStatus(resource, newStatus, actionButton) {
+  const isMaintenance = newStatus === 'MAINTENANCE';
+  const confirmed = await showConfirmDialog({
+    title: isMaintenance ? 'Mark this resource as maintenance?' : 'Return this resource to operational?',
+    message: isMaintenance
+      ? `${resource.name} will be unavailable for new bookings. Project Kits that include it will show as not ready; existing reservations will not be cancelled.`
+      : `${resource.name} will be available for new bookings again. Project Kit readiness will refresh with the resource status.`,
+    confirmLabel: isMaintenance ? 'Mark as maintenance' : 'Return to operational',
+    cancelLabel: 'Keep current status',
+    tone: isMaintenance ? 'warning' : 'primary',
+    icon: isMaintenance ? '!' : '✓'
+  });
+  if (!confirmed) return;
+
+  setAdminRowBusy(actionButton, true);
   try {
-    await api.patchResourceStatus(resourceId, newStatus);
-    showToast('Resource status updated', `Resource #${resourceId} is now ${getResourceStatusLabel(newStatus).toLowerCase()}.`, 'info');
-    await loadResources();
-    await loadAdminData();
+    await api.patchResourceStatus(resource.id, newStatus);
+    setAdminFeedback(`${resource.name} is now ${getResourceStatusLabel(newStatus).toLowerCase()}. Project Kit readiness has been refreshed.`, 'success');
+    await loadAllData();
   } catch (err) {
-    showToast('Update Failed', err.message, 'error');
+    if (adminActionFailed(err, 'We could not change the resource status. Try again.')) await loadAllData();
+  } finally {
+    setAdminRowBusy(actionButton, false);
   }
 }
 
@@ -4894,11 +5226,14 @@ async function handleDeleteResource(resourceId, resourceName) {
 
   try {
     await api.deleteResource(resourceId);
-    showToast('Deleted', `Resource "${resourceName}" was removed.`, 'warning');
-    await loadResources();
-    await loadAdminData();
+    setAdminFeedback(`Resource ${resourceName} was removed from the catalogue.`, 'success');
+    await loadAllData();
   } catch (err) {
-    showToast('Delete Failed', err.message, 'error');
+    if (err?.status === 409) {
+      setAdminFeedback('This resource is part of a Project Kit or has booking history, so it cannot be deleted.', 'warning');
+    } else if (adminActionFailed(err, 'We could not delete this resource. Try again.')) {
+      await loadAllData();
+    }
   }
 }
 
@@ -4980,6 +5315,9 @@ function setupEventListeners() {
     const adminRouteLink = event.target.closest('[data-nav-to-admin]');
     if (adminRouteLink && ADMIN_ROUTES[adminRouteLink.dataset.navToAdmin]) {
       switchTab('admin', { navKey: adminRouteLink.dataset.navToAdmin });
+      if (adminRouteLink.dataset.adminTarget) {
+        window.setTimeout(() => document.getElementById(adminRouteLink.dataset.adminTarget)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+      }
     }
   });
 
@@ -5115,6 +5453,15 @@ function setupEventListeners() {
   elements.closeAddResourceModalBtn.addEventListener('click', closeAddResourceModal);
   elements.cancelAddResourceModalBtn.addEventListener('click', closeAddResourceModal);
   elements.addResourceForm.addEventListener('submit', handleAddResourceSubmit);
+  elements.newResourceType.addEventListener('change', updateResourceCapacityVisibility);
+  elements.newResourceName.addEventListener('input', () => {
+    setResourceFieldError(elements.newResourceName, elements.newResourceNameError, '');
+    elements.addResourceFormError.hidden = true;
+  });
+  elements.newResourceCapacity.addEventListener('input', () =>
+    setResourceFieldError(elements.newResourceCapacity, elements.newResourceCapacityError, '')
+  );
+  elements.dismissAdminFeedbackBtn.addEventListener('click', clearAdminFeedback);
 
   // Issue Report Modal
   elements.closeIssueModalBtn.addEventListener('click', closeIssueModal);
@@ -5138,11 +5485,13 @@ function setupEventListeners() {
     requestAnimationFrame(() => elements.issueDescription.focus());
   });
 
-  // Close the active modal on backdrop click or keep focus inside it on Escape/Tab.
+  // Close on backdrop click and keep keyboard or programmatic focus within an active modal.
   window.addEventListener('click', (e) => {
     if (modalState.active && e.target === modalState.active) closeActiveModal();
   });
 
+  window.addEventListener('focusout', handleModalFocusOut, true);
+  window.addEventListener('focusin', handleModalFocusIn, true);
   window.addEventListener('keydown', handleModalKeydown);
 }
 
