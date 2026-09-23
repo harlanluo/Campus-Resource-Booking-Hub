@@ -17,8 +17,8 @@
     <version>0.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>campus-booking-hub</name>
-    <description>Campus Resource Booking Hub – Backend API (Week 2)</description>
+    <name>Campus Resource Booking Hub</name>
+    <description>Full-stack campus resource booking system with availability search, approval workflows, Project Kits, exact-slot Waitlists, issue reporting, and concurrency-safe reservations.</description>
 
     <properties>
         <java.version>17</java.version>
