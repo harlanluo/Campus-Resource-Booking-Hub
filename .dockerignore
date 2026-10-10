@@ -1,0 +1,7 @@
+# Only these build inputs are needed; reports, secrets, caches and IDE files stay out.
+**
+!Dockerfile
+!.dockerignore
+!pom.xml
+!src/
+!src/**
