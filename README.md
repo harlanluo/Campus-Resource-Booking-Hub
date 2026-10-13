@@ -2,6 +2,12 @@
 
 Campus Resource Booking Hub is a full-stack academic web application for discovering and requesting time-based reservations for shared campus resources. Authenticated Students can browse rooms, labs, equipment, and Project Kits, while Admins review requests, manage inventory, and coordinate maintenance work. The seeded locations and resource images are local demonstration data; this repository does not integrate with University of Waikato systems or represent verified room assignments.
 
+## 🌐 Live Demo
+
+[**Launch Live Demo**](https://campus-resource-booking-hub.onrender.com)
+
+Try the deployed Campus Resource Booking Hub in your browser.
+
 ## Key features
 
 ### Student workspace
