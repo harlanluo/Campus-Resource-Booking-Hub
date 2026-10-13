@@ -42,7 +42,7 @@ public class WaitlistResponseDTO {
             case OFFERED -> "Slot available for you";
             case ACCEPTED -> "Slot accepted";
             case DECLINED -> "Offer declined";
-            case EXPIRED -> "Offer expired";
+            case EXPIRED -> "Request expired";
             case LEFT -> "Left waitlist";
         };
     }

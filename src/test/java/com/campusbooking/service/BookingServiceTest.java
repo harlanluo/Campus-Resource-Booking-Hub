@@ -10,6 +10,7 @@ import com.campusbooking.model.User;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,6 +20,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -53,6 +55,9 @@ class BookingServiceTest {
     @Mock
     private WaitlistService waitlistService;
 
+    @Mock
+    private EntityManager entityManager;
+
     @InjectMocks
     private BookingService bookingService;
 
@@ -65,6 +70,7 @@ class BookingServiceTest {
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(bookingService, "entityManager", entityManager);
         testUser = User.builder()
                 .id(1L)
                 .username("alice_student")
@@ -84,6 +90,12 @@ class BookingServiceTest {
         // A safe future window: +1 day → +3 hours
         futureStart = LocalDateTime.now().plusDays(1);
         futureEnd   = futureStart.plusHours(2);
+        // Unit fixtures model successful lock lookups; real serialization is
+        // exercised by the lifecycle integration tests, not these mocks.
+        lenient().when(bookingRepository.findByIdForUpdate(anyLong()))
+                .thenAnswer(inv -> bookingRepository.findById(inv.getArgument(0)));
+        lenient().when(resourceRepository.findByIdForUpdate(testResource.getId()))
+                .thenReturn(Optional.of(testResource));
     }
 
     /** Builds a {@link BookingRequestDTO} from the shared fixtures. */

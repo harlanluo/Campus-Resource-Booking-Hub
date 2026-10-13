@@ -41,7 +41,7 @@ public class KitBookingService {
     public KitBookingResponseDTO create(Long kitId, KitBookingRequestDTO request) {
         User owner = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> notFound("User", request.getUserId()));
-        Kit kit = kitRepository.findByIdWithResources(kitId)
+        Kit kit = kitRepository.findByIdForUpdate(kitId)
                 .orElseThrow(() -> notFound("Kit", kitId));
         if (kit.getResources() == null || kit.getResources().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

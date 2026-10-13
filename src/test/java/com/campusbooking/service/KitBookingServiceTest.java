@@ -58,7 +58,7 @@ class KitBookingServiceTest {
         request.setMemberUserIds(List.of(member.getId()));
         given(userRepository.findById(owner.getId())).willReturn(Optional.of(owner));
         given(userRepository.findById(member.getId())).willReturn(Optional.of(member));
-        given(kitRepository.findByIdWithResources(kit.getId())).willReturn(Optional.of(kit));
+        given(kitRepository.findByIdForUpdate(kit.getId())).willReturn(Optional.of(kit));
         given(resourceRepository.findAllByIdForUpdate(List.of(10L, 11L)))
                 .willReturn(List.of(camera, mic));
         given(bookingRepository.findOverlappingBookings(anyLong(), any(), any()))
@@ -90,7 +90,7 @@ class KitBookingServiceTest {
     @DisplayName("A child resource conflict prevents both parent and child persistence")
     void create_conflictPersistsNothing() {
         given(userRepository.findById(owner.getId())).willReturn(Optional.of(owner));
-        given(kitRepository.findByIdWithResources(kit.getId())).willReturn(Optional.of(kit));
+        given(kitRepository.findByIdForUpdate(kit.getId())).willReturn(Optional.of(kit));
         given(resourceRepository.findAllByIdForUpdate(List.of(10L, 11L)))
                 .willReturn(List.of(camera, mic));
         given(bookingRepository.findOverlappingBookings(eq(10L), any(), any())).willReturn(List.of());

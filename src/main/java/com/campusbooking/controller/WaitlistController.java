@@ -49,6 +49,18 @@ public class WaitlistController {
         return ResponseEntity.ok(waitlistService.getAdminOverview());
     }
 
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<WaitlistResponseDTO>> adminEntries() {
+        return ResponseEntity.ok(waitlistService.getAdminEntries());
+    }
+
+    @DeleteMapping("/admin/{entryId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<WaitlistResponseDTO> cancelByAdmin(@PathVariable Long entryId) {
+        return ResponseEntity.ok(waitlistService.cancelByAdmin(entryId));
+    }
+
     @GetMapping("/{entryId}")
     public ResponseEntity<WaitlistResponseDTO> getOwn(
             Authentication authentication, @PathVariable Long entryId) {

@@ -59,7 +59,7 @@ The Waitlist is not a generic “notify me whenever this room is free” queue. 
 - Declining or allowing an offer to expire can promote the next eligible exact-slot waiter.
 - Admins can see aggregate slot, queue, and offer context, but the Admin workflow does not force-accept a Waitlist request for a Student.
 
-Releases caused by cancellation, rejection, or a released Project Kit child interval use the same exact-slot promotion rules. The local offer duration is configured as 15 minutes in `application.properties`.
+Releases caused by cancellation, rejection, or a released Project Kit child interval use the same exact-slot promotion rules. Offers last up to 15 minutes, capped at the requested start. Waiting requests expire when their requested start is reached; Offers expire at the earlier of their deadline and requested start. Relevant reads and release events reconcile these states in the backend. Admins can withdraw active Waitlist entries from Booking requests while preserving their history.
 
 ## Project Kits
 
@@ -164,13 +164,14 @@ Run the automated suite from the project root:
 mvn clean test
 ```
 
-The verified baseline for this documentation pass is **174 tests passing, 0 failures, 0 errors, and 0 skipped**. The test suite covers:
+The fresh acceptance run on 13 October 2026 executed **227 tests with 0 failures, 0 errors, and 0 skipped**, including parameterized cases and repeated races. The earlier documentation baseline was 174 executions. The test suite covers:
 
 - Service and repository behavior for bookings, availability search, resource status, receipts, Project Kits, Waitlists, and issue handling.
 - Controller/MVC and Spring Boot integration workflows, including booking lifecycle and availability search.
 - Security, authentication, role restrictions, ownership, group-member access, and protected receipt/data endpoints.
 - Multi-threaded booking and Project Kit concurrency/integrity scenarios.
 - Exact-slot Waitlist promotion, offer expiry, acceptance, decline, and conflict behavior.
+- Ordinary booking lifecycle races, stale decisions, guarded Kit creation/deletion, and unsupported HTTP methods.
 
 Final QA also covered Student and Admin end-to-end journeys, normal booking, Project Kits, exact-slot Waitlists, issue reporting, maintenance, PDF receipts, authorization, desktop/mobile/accessibility checks, JavaScript syntax, and repository diff whitespace. Those browser/manual checks are separate from the Maven test count and were completed within the audited local scope with no confirmed release blocker.
 
@@ -180,9 +181,9 @@ The seed scripts provide 21 standard resources and 4 Project Kits, including ill
 
 Known limitations:
 
-- H2 is an in-memory demonstration database; there is no production database or deployment configuration.
+- H2 is an in-memory demonstration database; no production database is configured.
 - There are no email or push notifications, recurring bookings, or calendar export.
-- Project Kit definitions are seeded/read-only in the current application; Admins manage Kit readiness and reservations rather than editing Kit membership through the UI.
+- Admins can create Project Kit definitions and delete unreferenced Kits. Any current or historical Kit reservation blocks deletion. Edit and Archive are not implemented.
 - Seeded locations and generated resource images are local illustrative assets, not verified University of Waikato room assignments or photographs.
 - The security/CORS configuration is suitable for the audited local academic scope and needs production hardening.
 

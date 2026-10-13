@@ -6405,3 +6405,16 @@ summary:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.kit-resource-choices { display: grid; gap: .65rem; max-height: 16rem; overflow-y: auto; }
+.kit-resource-choices label { display: flex; align-items: center; gap: .6rem; }
+.kit-resource-choices input { width: auto; flex: 0 0 auto; }
+
+.kit-resource-fieldset { border: 0; padding: 0; min-width: 0; }
+.kit-resource-fieldset legend { margin-bottom: .6rem; font-weight: 600; }
+
+#adminRequestsSection .booking-view-tabs { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  #adminRequestsSection .booking-view-tabs { display: flex; flex-direction: column; width: 100%; }
+  #adminRequestsSection .booking-view-tabs .btn { width: 100%; white-space: normal; }
+}

@@ -15,6 +15,8 @@ import java.util.Optional;
 @Repository
 public interface KitBookingRepository extends JpaRepository<KitBooking, Long> {
 
+    boolean existsByKitId(Long kitId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT kb FROM KitBooking kb WHERE kb.id = :id")
     Optional<KitBooking> findByIdForUpdate(@Param("id") Long id);

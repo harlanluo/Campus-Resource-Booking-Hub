@@ -41,6 +41,7 @@ class WaitlistServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private ResourceRepository resourceRepository;
     @Mock private BookingRepository bookingRepository;
+    @Mock private jakarta.persistence.EntityManager entityManager;
     @InjectMocks private WaitlistService service;
 
     private User student;
@@ -51,6 +52,7 @@ class WaitlistServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "offerDurationMinutes", 15L);
+        ReflectionTestUtils.setField(service, "entityManager", entityManager);
         student = User.builder().id(1L).username("alice_student")
                 .role(User.Role.STUDENT).build();
         resource = Resource.builder().id(2L).name("Room A101").type("ROOM")

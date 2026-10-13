@@ -12,10 +12,14 @@ import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
 import com.campusbooking.repository.WaitlistRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -45,6 +49,9 @@ public class WaitlistService {
     @Value("${campus.waitlist.offer-duration-minutes:15}")
     private long offerDurationMinutes;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     @Transactional
     public WaitlistResponseDTO joinWaitlist(String username, WaitlistRequestDTO request) {
         User user = requireStudent(username);
@@ -56,7 +63,7 @@ public class WaitlistService {
         requireBookable(resource);
 
         LocalDateTime now = LocalDateTime.now();
-        reevaluateExpiredOfferIntervalsLocked(resource, expireOffersForResourceLocked(resource, now), now);
+        reevaluateExpiredIntervalsLocked(resource, expireActiveEntriesForResourceLocked(resource, now), now);
 
         if (waitlistRepository.existsActiveExactRequest(
                 user.getId(), resource.getId(), request.getStartTime(), request.getEndTime())) {
@@ -100,8 +107,10 @@ public class WaitlistService {
         Waitlist entry = requireOwned(entryId, user);
         LocalDateTime now = LocalDateTime.now();
         Resource resource = lockResource(entry.getResource().getId());
-        reevaluateExpiredOfferIntervalsLocked(
-                resource, expireOffersForResourceLocked(resource, now), now);
+        reevaluateExpiredIntervalsLocked(
+                resource, expireActiveEntriesForResourceLocked(resource, now), now);
+        waitlistRepository.flush();
+        entityManager.refresh(entry);
         return toResponse(requireOwned(entryId, user));
     }
 
@@ -116,10 +125,11 @@ public class WaitlistService {
         LocalDateTime now = LocalDateTime.now();
 
         if (entry.getStatus() == Waitlist.Status.OFFERED
-                && (entry.getOfferExpiresAt() == null || !entry.getOfferExpiresAt().isAfter(now))) {
+                && (entry.getOfferExpiresAt() == null || !entry.getOfferExpiresAt().isAfter(now)
+                    || !entry.getRequestedStart().isAfter(now))) {
             expireAndAdvanceLocked(entry, resource, now);
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This offer has expired and the slot was offered to the next eligible student.");
+                    "This offer has expired and can no longer be accepted.");
         }
         requireActiveOffer(entry, "accept");
         requireBookable(resource);
@@ -156,7 +166,8 @@ public class WaitlistService {
         LocalDateTime now = LocalDateTime.now();
 
         if (entry.getStatus() == Waitlist.Status.OFFERED
-                && (entry.getOfferExpiresAt() == null || !entry.getOfferExpiresAt().isAfter(now))) {
+                && (entry.getOfferExpiresAt() == null || !entry.getOfferExpiresAt().isAfter(now)
+                    || !entry.getRequestedStart().isAfter(now))) {
             expireAndAdvanceLocked(entry, resource, now);
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This offer has already expired.");
@@ -170,14 +181,15 @@ public class WaitlistService {
         return WaitlistResponseDTO.from(entry, null);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public WaitlistResponseDTO leaveWaitlist(String username, Long entryId) {
         User user = requireStudent(username);
         Waitlist snapshot = waitlistRepository.findById(entryId)
                 .orElseThrow(() -> notFound(entryId));
-        resourceRepository.findByIdForUpdate(snapshot.getResource().getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
+        Resource resource = lockResource(snapshot.getResource().getId());
         Waitlist entry = requireOwnedForUpdate(entryId, user);
+        LocalDateTime now = LocalDateTime.now();
+        reevaluateExpiredIntervalsLocked(resource, expireActiveEntriesForResourceLocked(resource, now), now);
         if (entry.getStatus() == Waitlist.Status.OFFERED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Use Decline for an active slot offer.");
@@ -196,24 +208,24 @@ public class WaitlistService {
     public void offerReleasedSlot(Resource releasedResource, LocalDateTime start, LocalDateTime end) {
         Resource resource = lockResource(releasedResource.getId());
         LocalDateTime now = LocalDateTime.now();
-        Set<SlotWindow> releasedIntervals = expireOffersForResourceLocked(resource, now);
+        Set<SlotWindow> releasedIntervals = expireActiveEntriesForResourceLocked(resource, now);
         releasedIntervals.add(new SlotWindow(start, end));
-        reevaluateExpiredOfferIntervalsLocked(resource, releasedIntervals, now);
+        reevaluateExpiredIntervalsLocked(resource, releasedIntervals, now);
     }
 
     /** Lazy expiry boundary used by availability and booking operations. */
     @Transactional
     public void processExpiredOffersForResource(Long resourceId, LocalDateTime now) {
         Resource resource = lockResource(resourceId);
-        reevaluateExpiredOfferIntervalsLocked(
-                resource, expireOffersForResourceLocked(resource, now), now);
+        reevaluateExpiredIntervalsLocked(
+                resource, expireActiveEntriesForResourceLocked(resource, now), now);
     }
 
-    /** Expires offers only for searched resources that actually have expired offers. */
+    /** Reconciles overdue waiting entries and offers for searched resources. */
     @Transactional
     public void processExpiredOffersForResources(Collection<Long> resourceIds, LocalDateTime now) {
         if (resourceIds == null || resourceIds.isEmpty()) return;
-        List<Long> expiredResourceIds = waitlistRepository.findResourceIdsWithExpiredOffers(
+        List<Long> expiredResourceIds = waitlistRepository.findResourceIdsWithExpiredActiveEntries(
                 resourceIds.stream().distinct().sorted().toList(), now);
         expiredResourceIds.stream().sorted().forEach(id -> processExpiredOffersForResource(id, now));
     }
@@ -239,8 +251,8 @@ public class WaitlistService {
                 .toList();
         for (Long resourceId : resourceIds) {
             Resource resource = lockResource(resourceId);
-            reevaluateExpiredOfferIntervalsLocked(
-                    resource, expireOffersForResourceLocked(resource, now), now);
+            reevaluateExpiredIntervalsLocked(
+                    resource, expireActiveEntriesForResourceLocked(resource, now), now);
         }
 
         Map<AdminSlotKey, List<Waitlist>> bySlot = waitlistRepository
@@ -280,14 +292,42 @@ public class WaitlistService {
         return !waitlistRepository.findActiveOffersOverlapping(resourceId, start, end, now).isEmpty();
     }
 
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<WaitlistResponseDTO> getAdminEntries() {
+        getAdminOverview();
+        return waitlistRepository.findByStatusInOrderBySlot(
+                List.of(Waitlist.Status.WAITING, Waitlist.Status.OFFERED))
+                .stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    @PreAuthorize("hasRole('ADMIN')")
+    public WaitlistResponseDTO cancelByAdmin(Long entryId) {
+        Waitlist snapshot = waitlistRepository.findById(entryId).orElseThrow(() -> notFound(entryId));
+        Resource resource = lockResource(snapshot.getResource().getId());
+        Waitlist entry = waitlistRepository.findByIdForUpdate(entryId).orElseThrow(() -> notFound(entryId));
+        entityManager.refresh(entry, LockModeType.PESSIMISTIC_WRITE);
+        LocalDateTime now = LocalDateTime.now();
+        reevaluateExpiredIntervalsLocked(resource, expireActiveEntriesForResourceLocked(resource, now), now);
+        if (entry.getStatus() != Waitlist.Status.WAITING && entry.getStatus() != Waitlist.Status.OFFERED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This waitlist request is already closed.");
+        }
+        entry.setStatus(Waitlist.Status.LEFT);
+        entry.setClosedAt(now);
+        waitlistRepository.saveAndFlush(entry);
+        reevaluateReleasedIntervalLocked(resource, entry.getRequestedStart(), entry.getRequestedEnd(), now);
+        return WaitlistResponseDTO.from(entry, null);
+    }
+
     private Resource lockResource(Long resourceId) {
         return resourceRepository.findByIdForUpdate(resourceId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Resource not found with id: " + resourceId));
     }
 
-    private Set<SlotWindow> expireOffersForResourceLocked(Resource resource, LocalDateTime now) {
-        List<Waitlist> expired = waitlistRepository.findExpiredOffersForResource(resource.getId(), now);
+    private Set<SlotWindow> expireActiveEntriesForResourceLocked(Resource resource, LocalDateTime now) {
+        List<Waitlist> expired = waitlistRepository.findExpiredActiveEntriesForResource(resource.getId(), now);
         Set<SlotWindow> releasedIntervals = expired.stream()
                 .map(entry -> new SlotWindow(entry.getRequestedStart(), entry.getRequestedEnd()))
                 .collect(Collectors.toSet());
@@ -299,7 +339,7 @@ public class WaitlistService {
         return releasedIntervals;
     }
 
-    private void reevaluateExpiredOfferIntervalsLocked(
+    private void reevaluateExpiredIntervalsLocked(
             Resource resource, Set<SlotWindow> intervals, LocalDateTime now) {
         List<SlotWindow> ordered = new ArrayList<>(intervals);
         ordered.sort(Comparator.comparing(SlotWindow::start).thenComparing(SlotWindow::end));
@@ -340,7 +380,8 @@ public class WaitlistService {
             }
             next.setStatus(Waitlist.Status.OFFERED);
             next.setOfferedAt(now);
-            next.setOfferExpiresAt(now.plusMinutes(offerDurationMinutes));
+            next.setOfferExpiresAt(now.plusMinutes(offerDurationMinutes).isBefore(next.getRequestedStart())
+                    ? now.plusMinutes(offerDurationMinutes) : next.getRequestedStart());
             waitlistRepository.save(next);
             log.info("[Waitlist Offer] Entry {} offered resource {} interval {} to {} until {}.",
                     next.getId(), resource.getId(), next.getRequestedStart(),
@@ -363,8 +404,8 @@ public class WaitlistService {
                 .toList();
         for (Long resourceId : resourceIds) {
             Resource resource = lockResource(resourceId);
-            reevaluateExpiredOfferIntervalsLocked(
-                    resource, expireOffersForResourceLocked(resource, now), now);
+            reevaluateExpiredIntervalsLocked(
+                    resource, expireActiveEntriesForResourceLocked(resource, now), now);
         }
     }
 
@@ -401,6 +442,7 @@ public class WaitlistService {
 
     private Waitlist requireOwnedForUpdate(Long entryId, User user) {
         Waitlist entry = waitlistRepository.findByIdForUpdate(entryId).orElseThrow(() -> notFound(entryId));
+        entityManager.refresh(entry, LockModeType.PESSIMISTIC_WRITE);
         verifyOwner(entry, user);
         return entry;
     }

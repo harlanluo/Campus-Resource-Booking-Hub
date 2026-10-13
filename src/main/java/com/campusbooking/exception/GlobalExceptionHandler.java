@@ -1,8 +1,10 @@
 package com.campusbooking.exception;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -94,6 +96,26 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
         return errorBody(HttpStatus.FORBIDDEN,
                 "You do not have permission to perform this operation.");
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableRequest(
+            org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        return errorBody(HttpStatus.BAD_REQUEST, "Provide a valid JSON request with the expected field types.");
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleIntegrity(DataIntegrityViolationException ex) {
+        return errorBody(HttpStatus.CONFLICT, "This operation conflicts with an existing name or a referenced record. Refresh and try again.");
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleUnsupportedMethod(
+            HttpRequestMethodNotSupportedException ex) {
+        ResponseEntity<Map<String, Object>> error = errorBody(HttpStatus.METHOD_NOT_ALLOWED,
+                "This HTTP method is not supported for this endpoint.");
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .headers(ex.getHeaders()).body(error.getBody());
     }
 
     // ── Catch-all (500) ───────────────────────────────────────────────────────

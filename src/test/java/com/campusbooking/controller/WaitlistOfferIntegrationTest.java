@@ -484,6 +484,149 @@ class WaitlistOfferIntegrationTest {
                 .isEqualTo(Waitlist.Status.ACCEPTED);
     }
 
+    @Test
+    void requestedStartBoundaryExpiresWaitingAndOffersAndClearsAdminAndHolds() throws Exception {
+        Fixture f = fixture("start-boundary");
+        LocalDateTime boundary = LocalDateTime.of(2040, 1, 1, 10, 0);
+        Waitlist waiting = wait(f.first, f.resource, boundary, boundary.plusHours(2), boundary.minusDays(1));
+        Waitlist offered = wait(f.second, f.resource, boundary, boundary.plusHours(2), boundary.minusHours(2));
+        offered.setStatus(Waitlist.Status.OFFERED);
+        offered.setOfferExpiresAt(boundary.plusMinutes(15));
+        waitlistRepository.saveAndFlush(offered);
+        waitlistService.processExpiredOffersForResources(List.of(f.resource.getId()), boundary);
+        assertThat(waitlistRepository.findById(waiting.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.EXPIRED);
+        assertThat(waitlistRepository.findById(offered.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.EXPIRED);
+        assertThat(waitlistService.hasActiveOfferConflict(f.resource.getId(), boundary, boundary.plusHours(2), boundary)).isFalse();
+        assertThat(waitlistService.getOwnActiveEntries(f.first.getUsername())).isEmpty();
+        assertThat(waitlistService.getOwnEntries(f.first.getUsername())).extracting("status").containsExactly(Waitlist.Status.EXPIRED);
+        assertThat(waitlistService.getAdminOverview()).noneMatch(slot -> slot.getResourceId().equals(f.resource.getId()));
+    }
+
+    @Test
+    void staleAcceptAtRequestedStartIsRejectedEvenWithFutureDeadline() throws Exception {
+        Fixture f = fixture("stale-start");
+        LocalDateTime start = LocalDateTime.now().minusHours(1);
+        Waitlist offered = wait(f.first, f.resource, start, start.plusHours(2), start.minusDays(1));
+        offered.setStatus(Waitlist.Status.OFFERED);
+        offered.setOfferExpiresAt(LocalDateTime.now().plusHours(1));
+        waitlistRepository.saveAndFlush(offered);
+        mockMvc.perform(put("/api/waitlists/" + offered.getId() + "/accept")
+                .with(user(f.first.getUsername()).roles("STUDENT"))).andExpect(status().isConflict());
+        assertThat(waitlistRepository.findById(offered.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.EXPIRED);
+        assertThat(bookingRepository.findByResourceId(f.resource.getId())).isEmpty();
+    }
+
+    @Test
+    void adminWithdrawalPreservesHistoryAdvancesOfferAndRejectsStudentsAndStaleActions() throws Exception {
+        Fixture f = fixture("admin-withdraw");
+        Waitlist first = wait(f.first, f.resource, f.start, f.end, LocalDateTime.now().minusMinutes(2));
+        Waitlist second = wait(f.second, f.resource, f.start, f.end, LocalDateTime.now().minusMinutes(1));
+        waitlistService.offerReleasedSlot(f.resource, f.start, f.end);
+        mockMvc.perform(get("/api/waitlists/admin").with(user(f.first.getUsername()).roles("STUDENT"))).andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/waitlists/admin/" + first.getId()).with(user(f.first.getUsername()).roles("STUDENT"))).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/waitlists/admin").with(user("bob_admin").roles("ADMIN"))).andExpect(status().isOk());
+        mockMvc.perform(delete("/api/waitlists/admin/" + first.getId()).with(user("bob_admin").roles("ADMIN")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("LEFT"));
+        assertThat(waitlistRepository.findById(first.getId())).isPresent();
+        assertThat(waitlistRepository.findById(second.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.OFFERED);
+        mockMvc.perform(put("/api/waitlists/" + first.getId() + "/accept").with(user(f.first.getUsername()).roles("STUDENT"))).andExpect(status().isConflict());
+        mockMvc.perform(delete("/api/waitlists/admin/" + first.getId()).with(user("bob_admin").roles("ADMIN"))).andExpect(status().isConflict());
+        mockMvc.perform(delete("/api/waitlists/admin/" + second.getId()).with(user("bob_admin").roles("ADMIN"))).andExpect(status().isOk());
+    }
+
+    @org.junit.jupiter.api.RepeatedTest(5)
+    void concurrentAcceptAndAdminWithdrawalHaveOneTerminalWinner() throws Exception {
+        Fixture f = fixture("withdraw-race");
+        Waitlist offer = wait(f.first, f.resource, f.start, f.end, LocalDateTime.now().minusMinutes(1));
+        waitlistService.offerReleasedSlot(f.resource, f.start, f.end);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2), gate = new CountDownLatch(1);
+        Callable<Integer> accept = () -> {
+            ready.countDown(); gate.await();
+            return mockMvc.perform(put("/api/waitlists/" + offer.getId() + "/accept")
+                    .with(user(f.first.getUsername()).roles("STUDENT"))).andReturn().getResponse().getStatus();
+        };
+        Callable<Integer> cancel = () -> {
+            ready.countDown(); gate.await();
+            return mockMvc.perform(delete("/api/waitlists/admin/" + offer.getId())
+                    .with(user("bob_admin").roles("ADMIN"))).andReturn().getResponse().getStatus();
+        };
+        try {
+            Future<Integer> one = executor.submit(accept), two = executor.submit(cancel);
+            assertThat(ready.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue(); gate.countDown();
+            assertThat(List.of(one.get(15, java.util.concurrent.TimeUnit.SECONDS), two.get(15, java.util.concurrent.TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(200, 409);
+            Waitlist.Status state = waitlistRepository.findById(offer.getId()).orElseThrow().getStatus();
+            assertThat(bookingRepository.findByResourceId(f.resource.getId())).hasSize(state == Waitlist.Status.ACCEPTED ? 1 : 0);
+        } finally { gate.countDown(); executor.shutdownNow(); }
+    }
+
+    @Test
+    void studentAndAdminReadsExpireOverdueWaitingWithoutAnyReleaseEvent() throws Exception {
+        Fixture f = fixture("lazy-waiting");
+        LocalDateTime past = LocalDateTime.of(2020, 1, 1, 10, 0);
+        Waitlist waiting = wait(f.first, f.resource, past, past.plusHours(2), past.minusDays(1));
+        mockMvc.perform(get("/api/waitlists/mine").with(user(f.first.getUsername()).roles("STUDENT")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].status").value("EXPIRED"));
+        assertThat(waitlistService.getOwnActiveEntries(f.first.getUsername())).isEmpty();
+        assertThat(waitlistRepository.findById(waiting.getId()).orElseThrow().getClosedAt()).isNotNull();
+        Waitlist other = wait(f.second, f.resource, past.plusHours(3), past.plusHours(5), past.minusDays(1));
+        mockMvc.perform(get("/api/waitlists/admin").with(user("bob_admin").roles("ADMIN"))).andExpect(status().isOk());
+        assertThat(waitlistRepository.findById(other.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.EXPIRED);
+    }
+
+    @Test
+    void deadlineBoundaryAdvancesExactlyOnceAndOfferDeadlineIsCappedAtStart() {
+        Fixture f = fixture("deadline-boundary");
+        LocalDateTime start = LocalDateTime.of(2040, 1, 1, 10, 0), deadline = start.minusMinutes(5);
+        Waitlist first = wait(f.first, f.resource, start, start.plusHours(2), start.minusDays(2));
+        first.setStatus(Waitlist.Status.OFFERED); first.setOfferExpiresAt(deadline);
+        waitlistRepository.saveAndFlush(first);
+        Waitlist second = wait(f.second, f.resource, start, start.plusHours(2), start.minusDays(1));
+        waitlistService.processExpiredOffersForResource(f.resource.getId(), deadline);
+        waitlistService.processExpiredOffersForResource(f.resource.getId(), deadline);
+        assertThat(waitlistRepository.findById(first.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.EXPIRED);
+        Waitlist offer = waitlistRepository.findById(second.getId()).orElseThrow();
+        assertThat(offer.getStatus()).isEqualTo(Waitlist.Status.OFFERED);
+        assertThat(offer.getOfferExpiresAt()).isEqualTo(start);
+        assertThat(waitlistService.hasActiveOfferConflict(f.resource.getId(), start, start.plusHours(2), deadline)).isTrue();
+        waitlistService.processExpiredOffersForResource(f.resource.getId(), start);
+        assertThat(waitlistRepository.findById(second.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.EXPIRED);
+    }
+
+    @org.junit.jupiter.api.RepeatedTest(5)
+    void concurrentDeclineAndExpiryReleaseOnlyOneHold() throws Exception {
+        Fixture f = fixture("decline-expiry-race");
+        Waitlist first = wait(f.first, f.resource, f.start, f.end, LocalDateTime.now().minusMinutes(2));
+        first.setStatus(Waitlist.Status.OFFERED);
+        first.setOfferExpiresAt(LocalDateTime.now().minusMinutes(1));
+        waitlistRepository.saveAndFlush(first);
+        Waitlist second = wait(f.second, f.resource, f.start, f.end, LocalDateTime.now().minusMinutes(1));
+        Waitlist third = wait(f.third, f.resource, f.start, f.end, LocalDateTime.now());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2), gate = new CountDownLatch(1);
+        try {
+            Future<Integer> decline = executor.submit(() -> {
+                ready.countDown(); gate.await();
+                return mockMvc.perform(put("/api/waitlists/" + first.getId() + "/decline")
+                        .with(user(f.first.getUsername()).roles("STUDENT"))).andReturn().getResponse().getStatus();
+            });
+            Future<?> expiry = executor.submit(() -> {
+                ready.countDown(); gate.await();
+                waitlistService.processExpiredOffersForResource(f.resource.getId(), LocalDateTime.now());
+                return null;
+            });
+            assertThat(ready.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue(); gate.countDown();
+            assertThat(decline.get(15, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(409);
+            expiry.get(15, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(waitlistRepository.findById(first.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.EXPIRED);
+            assertThat(waitlistRepository.findById(second.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.OFFERED);
+            assertThat(waitlistRepository.findById(third.getId()).orElseThrow().getStatus()).isEqualTo(Waitlist.Status.WAITING);
+            assertThat(waitlistRepository.findActiveOffersOverlapping(f.resource.getId(), f.start, f.end, LocalDateTime.now())).hasSize(1);
+            assertThat(bookingRepository.findByResourceId(f.resource.getId())).isEmpty();
+        } finally { gate.countDown(); executor.shutdownNow(); }
+    }
+
     private Fixture fixture(String label) {
         String suffix = label + "-" + UUID.randomUUID().toString().substring(0, 8);
         User owner = saveUser("owner-" + suffix);

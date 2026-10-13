@@ -1,7 +1,9 @@
 package com.campusbooking.repository;
 
 import com.campusbooking.model.Kit;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -14,6 +16,12 @@ import java.util.Optional;
  */
 @Repository
 public interface KitRepository extends JpaRepository<Kit, Long> {
+
+    boolean existsByName(String name);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT k FROM Kit k WHERE k.id = :id")
+    Optional<Kit> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * Retrieves all project kits with their bundled resources eagerly loaded.

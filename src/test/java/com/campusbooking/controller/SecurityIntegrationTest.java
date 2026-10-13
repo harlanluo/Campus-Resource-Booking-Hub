@@ -46,6 +46,23 @@ class SecurityIntegrationTest {
     @Autowired
     private BookingRepository bookingRepository;
 
+    @Autowired
+    private com.campusbooking.repository.KitBookingRepository kitBookingRepository;
+
+    private void makeSeedKitUpcoming() {
+        var parent = kitBookingRepository.findById(1L).orElseThrow();
+        LocalDateTime start = LocalDateTime.now().plusDays(1).withNano(0);
+        parent.setStartTime(start);
+        parent.setEndTime(start.plusHours(2));
+        kitBookingRepository.saveAndFlush(parent);
+        bookingRepository.findByKitBookingIdOrderByResourceId(1L).forEach(child -> {
+            child.setStartTime(start);
+            child.setEndTime(start.plusHours(2));
+            bookingRepository.save(child);
+        });
+        bookingRepository.flush();
+    }
+
     @Test
     @DisplayName("Protected API requests require authentication")
     void protectedApiRequiresAuthentication() throws Exception {
@@ -136,6 +153,7 @@ class SecurityIntegrationTest {
     @WithMockUser(username = "alice_student", roles = "STUDENT")
     @DisplayName("A student can read their own booking list")
     void studentCanReadOwnBookings() throws Exception {
+        makeSeedKitUpcoming();
         mockMvc.perform(get("/api/bookings/user/1"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/bookings/user/1/history"))
@@ -170,7 +188,7 @@ class SecurityIntegrationTest {
     @Test
     @DisplayName("Kit booking creation returns one referenced parent contract")
     void kitCreationReturnsOneParent() throws Exception {
-        LocalDateTime start = LocalDateTime.now().plusDays(60).withNano(0);
+        LocalDateTime start = LocalDateTime.now().plusDays(1).withNano(0);
         String request = """
                 {
                   "userId": 1,
@@ -341,6 +359,7 @@ class SecurityIntegrationTest {
     @Test
     @DisplayName("A Kit member can view the parent and receipt authorization but cannot cancel it")
     void kitMemberHasViewOnlyAccess() throws Exception {
+        makeSeedKitUpcoming();
         mockMvc.perform(get("/api/kit-bookings/user/3")
                         .with(user("maya_chen").roles("STUDENT")))
                 .andExpect(status().isOk())
@@ -356,6 +375,7 @@ class SecurityIntegrationTest {
     @Test
     @DisplayName("The Kit owner can cancel the whole parent once")
     void kitOwnerCanCancelAggregate() throws Exception {
+        makeSeedKitUpcoming();
         mockMvc.perform(put("/api/kit-bookings/1/cancel")
                         .with(user("alice_student").roles("STUDENT")))
                 .andExpect(status().isOk())

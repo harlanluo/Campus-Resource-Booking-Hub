@@ -3,17 +3,18 @@ package com.campusbooking.controller;
 import com.campusbooking.dto.AvailabilityResponseDTO;
 import com.campusbooking.dto.KitBookingRequestDTO;
 import com.campusbooking.dto.KitBookingResponseDTO;
+import com.campusbooking.dto.KitCreateRequestDTO;
 import com.campusbooking.dto.KitResponseDTO;
-import com.campusbooking.service.KitService;
-import com.campusbooking.service.KitBookingService;
 import com.campusbooking.service.AvailabilityService;
+import com.campusbooking.service.KitBookingService;
+import com.campusbooking.service.KitService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,6 +25,8 @@ import java.util.List;
  * <pre>
  * GET  /api/kits              – Retrieve all available project kits
  * GET  /api/kits/{id}         – Retrieve a single kit with its bundled items
+ * POST /api/kits              – Admin creation of a Kit definition
+ * DELETE /api/kits/{id}       – Admin deletion of an unreferenced Kit
  * POST /api/kits/{kitId}/book – One-click atomic reservation for an entire kit
  * </pre>
  */
@@ -35,6 +38,20 @@ public class KitController {
     private final KitService kitService;
     private final KitBookingService kitBookingService;
     private final AvailabilityService availabilityService;
+
+    /** Creates one Project Kit with its selected resources atomically. */
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<KitResponseDTO> create(@Valid @RequestBody KitCreateRequestDTO request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(kitService.create(request));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        kitService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 
     /**
      * Retrieves all project kits configured in the system.

@@ -9,6 +9,9 @@ import com.campusbooking.model.User;
 import com.campusbooking.repository.BookingRepository;
 import com.campusbooking.repository.ResourceRepository;
 import com.campusbooking.repository.UserRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -48,6 +51,9 @@ public class BookingService {
     private final ResourceRepository  resourceRepository;
     private final UserRepository      userRepository;
     private final WaitlistService     waitlistService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -234,9 +240,9 @@ public class BookingService {
      * Cancels an existing booking by setting its status to
      * {@link Booking.Status#CANCELLED}.
      *
-     * <p>Only bookings in the {@code PENDING} or {@code CONFIRMED} state may be
+     * <p>Only future bookings in {@code PENDING}, {@code APPROVED}, or {@code CONFIRMED} may be
      * cancelled; attempting to cancel a {@code COMPLETED} or already-{@code CANCELLED}
-     * booking returns a {@code 400 BAD REQUEST}.</p>
+     * booking returns a {@code 409 CONFLICT}.</p>
      *
      * After cancellation, waiting requests affected by the released interval
      * are rechecked against current bookings and temporary offers. Eligible
@@ -245,15 +251,11 @@ public class BookingService {
      * @param bookingId the ID of the booking to cancel
      * @return the updated {@link BookingResponseDTO} reflecting the new status
      * @throws ResponseStatusException {@code 404} if the booking does not exist;
-     *                                 {@code 400} if the booking cannot be cancelled
+     *                                 {@code 409} if the booking cannot be cancelled
      */
     @Transactional
     public BookingResponseDTO cancelBooking(Long bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Booking not found with id: " + bookingId));
-        rejectKitChildAction(booking);
+        Booking booking = lockLifecycleBooking(bookingId);
 
         LocalDateTime now = LocalDateTime.now();
         if (isEffectivelyCompleted(booking, now)) {
@@ -286,21 +288,16 @@ public class BookingService {
     /**
      * Approves a booking by setting its status to {@link Booking.Status#APPROVED}.
      *
-     * <p>Can be applied to bookings in any state except {@code CANCELLED} or
-     * {@code COMPLETED}.</p>
+     * <p>Only a current {@code PENDING} request may be approved.</p>
      *
      * @param bookingId the ID of the booking to approve
      * @return the updated {@link BookingResponseDTO} reflecting {@code APPROVED} status
      * @throws ResponseStatusException {@code 404} if the booking does not exist;
-     *                                 {@code 400} if the booking is already terminal
+     *                                 {@code 409} if the request is no longer pending or has expired
      */
     @Transactional
     public BookingResponseDTO approveBooking(Long bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Booking not found with id: " + bookingId));
-        rejectKitChildAction(booking);
+        Booking booking = lockLifecycleBooking(bookingId);
 
         LocalDateTime now = LocalDateTime.now();
         if (isEffectivelyCompleted(booking, now)) {
@@ -327,20 +324,16 @@ public class BookingService {
      * Rejects a booking by setting its status to {@link Booking.Status#REJECTED}.
      *
      * <p>Can be applied to bookings in {@code PENDING} state.  Rejecting an
-     * already-terminal booking returns a {@code 400}.</p>
+     * already-terminal booking returns a {@code 409}.</p>
      *
      * @param bookingId the ID of the booking to reject
      * @return the updated {@link BookingResponseDTO} reflecting {@code REJECTED} status
      * @throws ResponseStatusException {@code 404} if the booking does not exist;
-     *                                 {@code 400} if the booking is already terminal
+     *                                 {@code 409} if the request is no longer pending or has expired
      */
     @Transactional
     public BookingResponseDTO rejectBooking(Long bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Booking not found with id: " + bookingId));
-        rejectKitChildAction(booking);
+        Booking booking = lockLifecycleBooking(bookingId);
 
         LocalDateTime now = LocalDateTime.now();
         if (isEffectivelyCompleted(booking, now)) {
@@ -367,6 +360,31 @@ public class BookingService {
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Serializes lifecycle decisions with creation and exact-slot release using
+     * resource -> booking lock order. Refresh also discards snapshots loaded
+     * earlier by ownership checks in the same persistence context.
+     */
+    private Booking lockLifecycleBooking(Long bookingId) {
+        Booking snapshot = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Booking not found with id: " + bookingId));
+        rejectKitChildAction(snapshot);
+        Booking.Status observedStatus = snapshot.getStatus();
+        resourceRepository.findByIdForUpdate(snapshot.getResource().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Booking not found with id: " + bookingId));
+        entityManager.refresh(booking, LockModeType.PESSIMISTIC_WRITE);
+        if (booking.getStatus() != observedStatus) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This booking changed while your decision was being processed. Refresh and try again.");
+        }
+        rejectKitChildAction(booking);
+        return booking;
+    }
 
     private boolean isEffectivelyCompleted(Booking booking, LocalDateTime now) {
         if (booking.getStatus() == Booking.Status.COMPLETED) {

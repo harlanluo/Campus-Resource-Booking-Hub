@@ -185,7 +185,7 @@
 
       <div class="workspace-shell">
         <main class="main-content">
-      
+
       <!-- STUDENT HOME -->
       <section id="tab-home" class="tab-content active" role="tabpanel" aria-labelledby="tabHomeBtn">
         <div class="page-header home-page-header">
@@ -547,7 +547,7 @@
         <div class="info-callout">
           <div class="callout-icon" aria-hidden="true">i</div>
           <div class="callout-content">
-            <strong>Exact-slot offers:</strong> If your requested time opens, you will receive a private 15-minute offer to accept or decline. Accepting creates a normal booking request, which still needs Admin approval.
+            <strong>Exact-slot offers:</strong> If your requested time opens, you will receive a private offer lasting up to 15 minutes to accept or decline. Accepting creates a normal booking request, which still needs Admin approval.
           </div>
         </div>
 
@@ -637,12 +637,28 @@
             </div>
           </section>
           <div class="admin-overview-side">
-            <section class="section-container admin-overview-card" aria-labelledby="adminUpcomingReservationsTitle">
+            <section class="section-container admin-overview-card" id="adminWaitlistSection" aria-labelledby="adminWaitlistTitle">
               <div class="section-title-bar">
-                <h2 class="section-title" id="adminUpcomingReservationsTitle">Upcoming and active</h2>
+                <h2 class="section-title" id="adminWaitlistTitle">Waitlist activity</h2>
+                <span class="count-badge" id="adminWaitlistCountBadge">0 active slots</span>
               </div>
-              <div class="admin-overview-list" id="adminUpcomingReservationsList" aria-live="polite">
-                <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading reservations…</span></div>
+              <p class="booking-view-description">Exact-slot status, queue size, and offer expiry are shown here. Student identities stay private. Students must accept an offer before it creates a booking request, which then follows the normal Admin approval queue.</p>
+
+              <div class="table-responsive">
+                <table class="admin-table" id="adminWaitlistTable">
+                  <thead>
+                    <tr>
+                      <th>Resource</th>
+                      <th>Requested Slot</th>
+                      <th>Status</th>
+                      <th>Queue</th>
+                      <th>Offer Expires</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminWaitlistTbody">
+                    <tr><td colspan="5" style="text-align: center; padding: 1.5rem;">Loading waitlist updates…</td></tr>
+                  </tbody>
+                </table>
               </div>
             </section>
             <section class="section-container admin-overview-card" aria-labelledby="adminResourceHealthTitle">
@@ -665,12 +681,16 @@
                   <circle cx="8.5" cy="7" r="4"/>
                   <polyline points="17 11 19 13 23 9"/>
                 </svg>
-                <span>Pending booking requests</span>
+                <span id="adminRequestSectionTitle">Pending booking requests</span>
               </h2>
             <span class="count-badge"><span id="countPendingAdminBookings">0</span> awaiting decision</span>
           </div>
 
-          <div class="table-responsive">
+          <div class="booking-view-tabs" role="group" aria-label="Booking requests sections">
+            <button type="button" class="btn btn-secondary" id="requestBookingsBtn" aria-pressed="true" aria-controls="bookingApprovalPanel">Booking approvals</button>
+            <button type="button" class="btn btn-secondary" id="requestWaitlistBtn" aria-pressed="false" aria-controls="adminWaitlistManagement">Waitlist management</button>
+          </div>
+          <div id="bookingApprovalPanel" class="table-responsive">
             <table class="admin-table" id="adminBookingsTable">
               <thead>
                 <tr>
@@ -688,6 +708,10 @@
               </tbody>
             </table>
           </div>
+          <section id="adminWaitlistManagement" hidden aria-label="Waitlist management">
+            <p class="booking-view-description">Offers are created automatically. Cancelling withdraws an entry and preserves its history.</p>
+            <div class="table-responsive"><table class="admin-table"><thead><tr><th>Entry</th><th>Resource</th><th>Exact requested slot</th><th>Status</th><th>Queue / offer deadline</th><th>Action</th></tr></thead><tbody id="adminWaitlistManagementBody"></tbody></table></div>
+          </section>
         </div>
 
         <!-- Reservations: approved/current records and standard booking history -->
@@ -715,31 +739,15 @@
           </div>
         </div>
 
-        <!-- Overview: read-only waitlist operations snapshot -->
-        <div class="section-container" id="adminWaitlistSection" data-admin-view="overview" style="margin-top: 2.5rem;">
+        <!-- Overview: upcoming reservations use the full-width area -->
+        <section class="section-container" data-admin-view="overview" style="margin-top: 2.5rem;" aria-labelledby="adminUpcomingReservationsTitle">
           <div class="section-title-bar">
-            <h2 class="section-title">Waitlist activity</h2>
-            <span class="count-badge" id="adminWaitlistCountBadge">0 active slots</span>
+            <h2 class="section-title" id="adminUpcomingReservationsTitle">Upcoming and active</h2>
           </div>
-          <p class="booking-view-description">Exact-slot status, queue size, and offer expiry are shown here. Student identities stay private. Students must accept an offer before it creates a booking request, which then follows the normal Admin approval queue.</p>
-
-          <div class="table-responsive">
-            <table class="admin-table" id="adminWaitlistTable">
-              <thead>
-                <tr>
-                  <th>Resource</th>
-                  <th>Requested Slot</th>
-                  <th>Status</th>
-                  <th>Queue</th>
-                  <th>Offer Expires</th>
-                </tr>
-              </thead>
-              <tbody id="adminWaitlistTbody">
-                <tr><td colspan="5" style="text-align: center; padding: 1.5rem;">Loading waitlist updates…</td></tr>
-              </tbody>
-            </table>
+          <div class="admin-overview-list" id="adminUpcomingReservationsList" aria-live="polite">
+            <div class="snapshot-loading"><div class="spinner spinner-sm"></div><span>Loading reservations…</span></div>
           </div>
-        </div>
+        </section>
 
         <!-- Section 3: Resource Inventory Management -->
         <div class="section-container" id="adminResourcesSection" data-admin-view="resources" style="margin-top: 2.5rem;">
@@ -777,6 +785,7 @@
           <div class="section-title-bar">
             <h2 class="section-title">Project Kit catalogue</h2>
             <span class="count-badge" id="adminKitCountBadge">0 kits</span>
+            <button type="button" class="btn btn-primary" id="addKitBtn">Add Project Kit</button>
           </div>
           <button type="button" class="admin-kit-request-link" id="adminKitRequestsLink" data-nav-to-admin="admin-requests" hidden></button>
           <div class="admin-kit-catalogue" id="adminKitCatalogue"></div>
@@ -1022,6 +1031,19 @@
     </div>
   </section>
 
+
+  <div class="modal-backdrop" id="addKitBackdrop" aria-hidden="true" tabindex="-1">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="addKitTitle">
+      <div class="modal-header"><h2 id="addKitTitle" class="modal-title">Create Project Kit</h2><button type="button" class="modal-close-btn" id="closeKitBtn" aria-label="Close Create Project Kit">&times;</button></div>
+      <form id="addKitForm" class="modal-form">
+        <p class="form-error-message" id="kitFormError" role="alert" hidden></p>
+        <div class="form-group"><label for="kitName">Name (required)</label><input type="text" id="kitName" required maxlength="100" /></div>
+        <div class="form-group"><label for="kitDescription">Description</label><textarea id="kitDescription" maxlength="500" rows="3"></textarea></div>
+        <fieldset class="form-group kit-resource-fieldset"><legend>Included resources (select at least one)</legend><div id="kitResourceChoices" class="kit-resource-choices"></div></fieldset>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" id="cancelKitBtn">Cancel</button><button type="submit" class="btn btn-primary" id="createKitBtn">Create Project Kit</button></div>
+      </form>
+    </div>
+  </div>
 
   <!-- MODAL: ADD RESOURCE (ADMIN) -->
   <div class="modal-backdrop" id="addResourceModalBackdrop" aria-hidden="true" tabindex="-1">

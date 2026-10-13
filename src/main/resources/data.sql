@@ -88,7 +88,7 @@ INSERT INTO bookings (user_id, resource_id, start_time, end_time, status) VALUES
     (3, 8, '2026-09-28 13:00:00', '2026-09-28 15:00:00', 'PENDING'),
     (4, 9, '2026-09-29 09:00:00', '2026-09-29 11:00:00', 'APPROVED'),
     (5, 4, '2026-09-30 14:30:00', '2026-09-30 16:30:00', 'CONFIRMED'),
-    (6, 1, '2026-10-01 10:00:00', '2026-10-01 12:00:00', 'APPROVED');
+    (6, 1, '2026-10-15 10:00:00', '2026-10-15 12:00:00', 'APPROVED');
 
 INSERT INTO bookings
     (user_id, resource_id, kit_booking_id, start_time, end_time, status)
@@ -102,7 +102,7 @@ INSERT INTO kit_booking_members (kit_booking_id, user_id) VALUES
 
 -- Slot-aware waitlist sample for a currently conflicting future interval
 INSERT INTO waitlists (user_id, resource_id, requested_start, requested_end, request_time, status) VALUES
-    (1, 1, '2026-10-01 10:00:00', '2026-10-01 12:00:00', '2026-09-20 10:30:00', 'WAITING');
+    (1, 1, '2026-10-15 10:00:00', '2026-10-15 12:00:00', '2026-09-20 10:30:00', 'WAITING');
 
 -- Group Booking Members  (1 record)
 -- Bob is added as a group member to Alice's Study Room A booking (booking_id = 1)

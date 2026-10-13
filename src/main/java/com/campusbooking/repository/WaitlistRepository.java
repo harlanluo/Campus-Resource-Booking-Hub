@@ -111,11 +111,12 @@ public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
     @Query("""
            SELECT w FROM Waitlist w
            WHERE w.resource.id = :resourceId
-             AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
-             AND (w.offerExpiresAt IS NULL OR w.offerExpiresAt <= :now)
+             AND ((w.status = com.campusbooking.model.Waitlist.Status.WAITING AND w.requestedStart <= :now)
+                  OR (w.status = com.campusbooking.model.Waitlist.Status.OFFERED
+                      AND (w.offerExpiresAt IS NULL OR w.offerExpiresAt <= :now OR w.requestedStart <= :now)))
            ORDER BY w.offerExpiresAt, w.id
            """)
-    List<Waitlist> findExpiredOffersForResource(
+    List<Waitlist> findExpiredActiveEntriesForResource(
             @Param("resourceId") Long resourceId,
             @Param("now") LocalDateTime now);
 
@@ -124,6 +125,7 @@ public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
            WHERE w.resource.id = :resourceId
              AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
              AND w.offerExpiresAt > :now
+             AND w.requestedStart > :now
              AND w.requestedStart < :endTime
              AND w.requestedEnd > :startTime
            """)
@@ -138,6 +140,7 @@ public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
            WHERE w.resource.id IN :resourceIds
              AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
              AND w.offerExpiresAt > :now
+             AND w.requestedStart > :now
              AND w.requestedStart < :endTime
              AND w.requestedEnd > :startTime
            """)
@@ -150,10 +153,11 @@ public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
     @Query("""
            SELECT DISTINCT w.resource.id FROM Waitlist w
            WHERE w.resource.id IN :resourceIds
-             AND w.status = com.campusbooking.model.Waitlist.Status.OFFERED
-             AND (w.offerExpiresAt IS NULL OR w.offerExpiresAt <= :now)
+             AND ((w.status = com.campusbooking.model.Waitlist.Status.WAITING AND w.requestedStart <= :now)
+                  OR (w.status = com.campusbooking.model.Waitlist.Status.OFFERED
+                      AND (w.offerExpiresAt IS NULL OR w.offerExpiresAt <= :now OR w.requestedStart <= :now)))
            """)
-    List<Long> findResourceIdsWithExpiredOffers(
+    List<Long> findResourceIdsWithExpiredActiveEntries(
             @Param("resourceIds") List<Long> resourceIds,
             @Param("now") LocalDateTime now);
 }

@@ -24,6 +24,7 @@ const state = {
   adminKitBookingHistory: [],
   adminIssues: [],
   adminWaitlistOverview: [],
+  adminWaitlistEntries: [],
   activeTab: 'home',
   activeNavKey: 'home',
   contextRoute: null,
@@ -1351,6 +1352,7 @@ function resetPrivateState() {
   state.adminKitBookingHistory = [];
   state.adminIssues = [];
   state.adminWaitlistOverview = [];
+  state.adminWaitlistEntries = [];
   state.activeTab = 'home';
   state.activeNavKey = 'home';
   state.contextRoute = null;
@@ -1445,6 +1447,7 @@ function resetPrivateState() {
   elements.resourcesGrid.innerHTML = '';
   elements.resourceDetailContent.innerHTML = '';
   elements.adminWaitlistTbody.innerHTML = '';
+  document.getElementById('adminWaitlistManagementBody').innerHTML = '';
   clearAdminFeedback();
   elements.issueForm?.reset();
   elements.issueResourceId.value = '';
@@ -1733,6 +1736,7 @@ function switchTab(tabId, options = {}) {
   if (isAdmin) {
     const route = ADMIN_ROUTES[navKey];
     activeAdminView = route.view;
+    if (navKey === 'admin-requests') setRequestSection(false);
     document.querySelectorAll(`[data-admin-view="${activeAdminView}"]`).forEach((view) => {
       view.hidden = false;
     });
@@ -2422,20 +2426,31 @@ async function loadAdminData() {
 
 async function loadAdminWaitlistOverview() {
   if (!elements.adminWaitlistTbody) return;
+  const sessionGeneration = state.sessionGeneration;
+  const userId = state.currentUser?.id;
+  if (!userId || state.currentUser.role !== 'ADMIN') return;
   if (!state.adminWaitlistLoaded) {
     elements.adminWaitlistCountBadge.textContent = 'Loading…';
     elements.adminWaitlistTbody.innerHTML = `
       <tr class="admin-loading-row"><td colspan="5"><span class="spinner spinner-sm" aria-hidden="true"></span> Loading waitlist updates…</td></tr>`;
   }
   try {
-    state.adminWaitlistOverview = await api.getAdminWaitlistOverview();
+    const [overview, entries] = await Promise.all([
+      api.getAdminWaitlistOverview(), adminRequest('/api/waitlists/admin')
+    ]);
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
+    state.adminWaitlistOverview = overview;
+    state.adminWaitlistEntries = entries;
+    renderAdminWaitlistManagement();
     state.adminWaitlistLoaded = true;
     state.adminWaitlistLoadError = null;
     renderAdminWaitlistOverview();
     if (state.adminDataLoaded && !state.adminLoadError) renderAdminOverview();
   } catch (err) {
+    if (!isCurrentUserSession(sessionGeneration, userId)) return;
     state.adminWaitlistLoaded = true;
     state.adminWaitlistLoadError = err;
+    document.getElementById('adminWaitlistManagementBody').innerHTML = '<tr><td colspan="6">Waitlist data is unavailable. Refresh to retry.</td></tr>';
     renderTableState(
       elements.adminWaitlistTbody,
       5,
@@ -3819,7 +3834,9 @@ function renderAdminKitManagement() {
         <div class="admin-kit-inventory-heading"><h3>${escapeHtml(kit.name)}</h3><span class="status-pill ${operational ? 'AVAILABLE' : 'UNAVAILABLE'}">${operational ? 'Ready to book' : 'Check availability'}</span></div>
         <p>${escapeHtml(kit.description || 'Project Kit bundle')}</p>
         <strong class="admin-kit-included-title">Included resources</strong>
-        ${includedResources}`;
+        ${includedResources}
+        <button type="button" class="btn btn-danger" data-delete-kit="${kit.id}">Delete Project Kit</button>`;
+      card.querySelector('[data-delete-kit]').addEventListener('click', () => deleteProjectKit(kit));
       catalogue.appendChild(card);
     });
   }
@@ -5453,6 +5470,12 @@ function setupEventListeners() {
   elements.closeAddResourceModalBtn.addEventListener('click', closeAddResourceModal);
   elements.cancelAddResourceModalBtn.addEventListener('click', closeAddResourceModal);
   elements.addResourceForm.addEventListener('submit', handleAddResourceSubmit);
+  document.getElementById('requestBookingsBtn').addEventListener('click', () => setRequestSection(false));
+  document.getElementById('requestWaitlistBtn').addEventListener('click', () => setRequestSection(true));
+  document.getElementById('addKitBtn').addEventListener('click', openCreateKit);
+  document.getElementById('closeKitBtn').addEventListener('click', closeCreateKit);
+  document.getElementById('cancelKitBtn').addEventListener('click', closeCreateKit);
+  document.getElementById('addKitForm').addEventListener('submit', createProjectKit);
   elements.newResourceType.addEventListener('change', updateResourceCapacityVisibility);
   elements.newResourceName.addEventListener('input', () => {
     setResourceFieldError(elements.newResourceName, elements.newResourceNameError, '');
@@ -5506,3 +5529,92 @@ async function initApp() {
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
+
+
+async function adminRequest(url, method = 'GET', data) {
+  const response = await fetch(url, {
+    method, headers: { 'Content-Type': 'application/json' },
+    ...(data === undefined ? {} : { body: JSON.stringify(data) })
+  });
+  if (!response.ok) throw await responseError(response, 'The operation could not be completed.');
+  return response.status === 204 ? null : response.json();
+}
+
+function setRequestSection(waitlist) {
+  document.getElementById('adminRequestSectionTitle').textContent = waitlist ? 'Waitlist management' : 'Pending booking requests';
+  elements.countPendingAdminBookings.parentElement.hidden = waitlist;
+  document.getElementById('bookingApprovalPanel').hidden = waitlist;
+  document.getElementById('adminWaitlistManagement').hidden = !waitlist;
+  document.getElementById('requestBookingsBtn').setAttribute('aria-pressed', String(!waitlist));
+  document.getElementById('requestWaitlistBtn').setAttribute('aria-pressed', String(waitlist));
+}
+
+function renderAdminWaitlistManagement() {
+  const body = document.getElementById('adminWaitlistManagementBody');
+  body.innerHTML = '';
+  if (!state.adminWaitlistEntries.length) body.innerHTML = '<tr><td colspan="6">No active Waitlist entries.</td></tr>';
+  state.adminWaitlistEntries.forEach((entry) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td data-label="Entry">#${entry.id}</td>
+      <td data-label="Resource">${escapeHtml(entry.resourceName)}</td>
+      <td data-label="Exact slot">${escapeHtml(formatDateTime(entry.requestedStart))} &rarr; ${escapeHtml(formatDateTime(entry.requestedEnd))}</td>
+      <td data-label="Status">${escapeHtml(getWaitlistStatusLabel(entry.status))}</td>
+      <td data-label="Queue / deadline">${entry.status === 'WAITING' ? `Position ${entry.queuePosition}` : escapeHtml(formatDateTime(entry.offerExpiresAt))}</td>
+      <td data-label="Action"><button type="button" class="btn btn-danger">Cancel entry #${entry.id}</button></td>`;
+    row.querySelector('button').addEventListener('click', async () => {
+      if (!await showConfirmDialog({ title: 'Cancel Waitlist entry?',
+        message: `Entry #${entry.id}: ${entry.resourceName}, ${formatDateTime(entry.requestedStart)} to ${formatDateTime(entry.requestedEnd)}. This withdraws the request and releases any offer to the next eligible waiter.`,
+        confirmLabel: 'Cancel entry', cancelLabel: 'Keep entry' })) return;
+      try {
+        await adminRequest(`/api/waitlists/admin/${entry.id}`, 'DELETE');
+        setAdminFeedback(`Waitlist entry #${entry.id} was withdrawn. History is preserved.`);
+      } catch (error) { setAdminFeedback(error.message, 'warning'); }
+      await loadAdminWaitlistOverview();
+    });
+    body.appendChild(row);
+  });
+}
+
+function closeCreateKit() { closeManagedModal(document.getElementById('addKitBackdrop')); }
+
+function openCreateKit() {
+  document.getElementById('addKitForm').reset();
+  document.getElementById('kitFormError').hidden = true;
+  const choices = document.getElementById('kitResourceChoices');
+  choices.innerHTML = state.resources.map((resource) => `<label><input type="checkbox" name="kitResource" value="${resource.id}" /> <span>${escapeHtml(resource.name)} (${escapeHtml(getResourceStatusLabel(resource.status))})</span></label>`).join('');
+  openManagedModal(document.getElementById('addKitBackdrop'), document.getElementById('kitName'), closeCreateKit);
+}
+
+async function createProjectKit(event) {
+  event.preventDefault();
+  const errorElement = document.getElementById('kitFormError');
+  const button = document.getElementById('createKitBtn');
+  const name = document.getElementById('kitName').value.trim();
+  const resourceIds = [...document.querySelectorAll('[name="kitResource"]:checked')].map((input) => Number(input.value));
+  if (!name || !resourceIds.length) {
+    errorElement.textContent = 'Enter a name and select at least one resource.';
+    errorElement.hidden = false;
+    return;
+  }
+  button.disabled = true;
+  try {
+    await adminRequest('/api/kits', 'POST', { name, description: document.getElementById('kitDescription').value.trim(), resourceIds });
+    closeCreateKit();
+    setAdminFeedback(`Project Kit ${name} was created.`);
+    await loadKits();
+  } catch (error) {
+    errorElement.textContent = error.message;
+    errorElement.hidden = false;
+  } finally { button.disabled = false; }
+}
+
+async function deleteProjectKit(kit) {
+  if (!await showConfirmDialog({ title: 'Delete Project Kit?',
+    message: `${kit.name} will be removed from the catalogue. Kits with any booking history cannot be deleted. Component resources are preserved.`,
+    confirmLabel: 'Delete Project Kit', cancelLabel: 'Keep Project Kit' })) return;
+  try {
+    await adminRequest(`/api/kits/${kit.id}`, 'DELETE');
+    setAdminFeedback(`Project Kit ${kit.name} was deleted.`);
+  } catch (error) { setAdminFeedback(error.message, 'warning'); }
+  await loadKits();
+}
