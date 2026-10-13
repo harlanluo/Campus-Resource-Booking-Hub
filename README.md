@@ -27,9 +27,9 @@ Try the deployed Campus Resource Booking Hub in your browser.
 - Admin Overview with pending approvals, current reservations, resource health, Project Kit context, and issue activity.
 - Approval or rejection of standard booking requests and parent-level Project Kit requests, plus reservation/history views.
 - Resource inventory management: add, update, delete where permitted, mark a resource for maintenance, and return it to operational status.
-- Project Kit catalogue/readiness context and one parent-level reservation workflow; Kit definitions themselves are seeded in this version.
+- Project Kit catalogue/readiness context and one parent-level reservation workflow. Admins can create Project Kits and delete unreferenced definitions; any current or historical KitBooking blocks deletion. Edit and Archive are not implemented.
 - Issue review with approve, reject, and resolve actions, together with the supported resource maintenance lifecycle.
-- Aggregate Waitlist context showing exact requested slots, queue size, offer state, expiry, and no Student identities.
+- Aggregate Waitlist context showing exact requested slots, queue size, offer state, expiry, and no Student identities. The Waitlist management tab in Booking requests permits Admin withdrawal of eligible active WAITING/OFFERED entries to historical LEFT; it does not provide direct confirmation or manual Send Offer.
 
 ## Booking lifecycle
 
@@ -198,8 +198,8 @@ Screenshots are intentionally omitted from this README; final-report screenshots
 ## Repository notes
 
 - [Current ER model source](docs/ER-Diagram.md) is the maintainable schema/entity reference. A prior diagram is retained only as a historical artifact under `docs/ER-Diagram-Historical.png`.
-- [process-report.md](process-report.md) and [BUG_TRACKING.md](BUG_TRACKING.md) preserve the project's historical development and defect narrative. They are not the source of current feature claims.
+- [BUG_TRACKING.md](BUG_TRACKING.md) preserves the project's historical defect narrative. It is not the source of current feature claims.
 
 ## Academic context
 
-This repository is the COMPX576 academic project for the Master of Information Technology programme at the University of Waikato. It is a local academic demonstration and does not claim integration with University systems or commercial/production deployment.
+This repository is the COMPX576 academic project for the Master of Information Technology programme at the University of Waikato. It is locally runnable and publicly available as a Render academic demo, not a production-ready service. It does not claim integration with University systems.
